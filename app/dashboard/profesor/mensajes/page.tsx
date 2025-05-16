@@ -1,399 +1,462 @@
 "use client"
 
-import { useState } from "react"
-import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useEffect, useState } from "react"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { MessageSquare, Send, Inbox, Archive, Trash2, Search, UserIcon, Clock, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Plus, Star, Trash, Archive, Mail } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 
-// Datos de ejemplo
-const mensajesData = {
-  recibidos: [
-    {
-      id: "1",
-      remitente: {
-        id: "1",
-        nombre: "Luis García",
-        rol: "estudiante",
-        curso: "Matemáticas - 1° Grado A",
-      },
-      asunto: "Consulta sobre tarea de matemáticas",
-      contenido:
-        "Buenos días profesor, tengo una duda sobre el ejercicio 5 de la tarea de sumas y restas. ¿Podría explicarme cómo resolverlo?",
-      fecha: "2023-05-15T10:30:00",
-      leido: true,
-      destacado: false,
-    },
-    {
-      id: "2",
-      remitente: {
-        id: "2",
-        nombre: "Ana Martínez",
-        rol: "estudiante",
-        curso: "Matemáticas - 1° Grado A",
-      },
-      asunto: "Justificación de inasistencia",
-      contenido:
-        "Estimado profesor, le escribo para justificar mi inasistencia del día de ayer. Adjunto el certificado médico correspondiente.",
-      fecha: "2023-05-14T15:45:00",
-      leido: false,
-      destacado: true,
-    },
-    {
-      id: "3",
-      remitente: {
-        id: "3",
-        nombre: "María López",
-        rol: "administrador",
-        curso: null,
-      },
-      asunto: "Reunión de profesores",
-      contenido:
-        "Se convoca a todos los profesores a una reunión el día viernes 19 de mayo a las 15:00 horas en la sala de profesores.",
-      fecha: "2023-05-13T09:15:00",
-      leido: true,
-      destacado: true,
-    },
-    {
-      id: "4",
-      remitente: {
-        id: "4",
-        nombre: "Pedro Sánchez",
-        rol: "estudiante",
-        curso: "Matemáticas - 2° Grado B",
-      },
-      asunto: "Solicitud de entrevista",
-      contenido:
-        "Estimado profesor, me gustaría solicitar una entrevista para conversar sobre mi rendimiento en el curso. ¿Tiene disponibilidad esta semana?",
-      fecha: "2023-05-12T14:20:00",
-      leido: true,
-      destacado: false,
-    },
-  ],
-  enviados: [
-    {
-      id: "5",
-      destinatario: {
-        id: "5",
-        nombre: "Estudiantes 1° Grado A",
-        rol: "grupo",
-        curso: "Matemáticas - 1° Grado A",
-      },
-      asunto: "Material de estudio para examen",
-      contenido:
-        "Estimados estudiantes, les comparto el material de estudio para el examen parcial del próximo lunes. Por favor, revisen los ejercicios de las páginas 25 a 30 del libro de texto.",
-      fecha: "2023-05-14T16:30:00",
-      leido: true,
-      destacado: false,
-    },
-    {
-      id: "6",
-      destinatario: {
-        id: "1",
-        nombre: "Luis García",
-        rol: "estudiante",
-        curso: "Matemáticas - 1° Grado A",
-      },
-      asunto: "Re: Consulta sobre tarea de matemáticas",
-      contenido:
-        "Hola Luis, para resolver el ejercicio 5 debes aplicar la propiedad conmutativa de la suma. Te recomiendo revisar los ejemplos de la página 12 del libro de texto.",
-      fecha: "2023-05-15T11:15:00",
-      leido: false,
-      destacado: false,
-    },
-    {
-      id: "7",
-      destinatario: {
-        id: "6",
-        nombre: "Coordinación Académica",
-        rol: "administrador",
-        curso: null,
-      },
-      asunto: "Informe de rendimiento académico",
-      contenido:
-        "Adjunto el informe de rendimiento académico de los estudiantes de 1° Grado A y 2° Grado B correspondiente al primer bimestre.",
-      fecha: "2023-05-10T09:45:00",
-      leido: true,
-      destacado: true,
-    },
-  ],
-  archivados: [
-    {
-      id: "8",
-      remitente: {
-        id: "7",
-        nombre: "Javier Rodríguez",
-        rol: "estudiante",
-        curso: "Matemáticas - 2° Grado B",
-      },
-      asunto: "Recuperación de examen",
-      contenido:
-        "Profesor, le escribo para consultar si puedo recuperar el examen que no pude rendir la semana pasada debido a problemas de salud.",
-      fecha: "2023-04-28T10:20:00",
-      leido: true,
-      destacado: false,
-    },
-    {
-      id: "9",
-      remitente: {
-        id: "8",
-        nombre: "Dirección",
-        rol: "administrador",
-        curso: null,
-      },
-      asunto: "Cronograma de actividades",
-      contenido: "Se adjunta el cronograma de actividades para el primer semestre del año escolar 2023.",
-      fecha: "2023-04-15T11:30:00",
-      leido: true,
-      destacado: false,
-    },
-  ],
-  papelera: [
-    {
-      id: "10",
-      remitente: {
-        id: "9",
-        nombre: "Sistema",
-        rol: "sistema",
-        curso: null,
-      },
-      asunto: "Bienvenido al sistema de mensajería",
-      contenido:
-        "Bienvenido al sistema de mensajería de la escuela María de los Ángeles. Aquí podrás comunicarte con estudiantes, profesores y personal administrativo.",
-      fecha: "2023-03-01T08:00:00",
-      leido: true,
-      destacado: false,
-    },
-  ],
+interface Message {
+  id: string
+  remitente_id: string
+  destinatario_id: string
+  asunto: string
+  contenido: string
+  fecha: string
+  leido: boolean
+  carpeta: string
+  remitente?: {
+    nombre: string
+    apellidos: string
+    rol: string
+  }
+  destinatario?: {
+    nombre: string
+    apellidos: string
+    rol: string
+  }
 }
 
-export default function MensajesPage() {
-  const searchParams = useSearchParams()
-  const cursoParam = searchParams.get("curso")
+interface Recipient {
+  id: string
+  nombre: string
+  apellidos: string
+  rol: string
+}
 
-  const [searchTerm, setSearchTerm] = useState("")
-  const [activeTab, setActiveTab] = useState("recibidos")
+export default function TeacherMessagesPage() {
+  const [messages, setMessages] = useState<Message[]>([])
+  const [users, setUsers] = useState<Recipient[]>([])
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
+  const [activeFolder, setActiveFolder] = useState("recibidos")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [newMessage, setNewMessage] = useState({
+    destinatario_id: "",
+    asunto: "",
+    contenido: "",
+  })
+  const [isNewMessageOpen, setIsNewMessageOpen] = useState(false)
+  const [sendingMessage, setSendingMessage] = useState(false)
+  const supabase = createClientComponentClient()
 
-  // Obtener mensajes según la carpeta activa
-  const mensajes = mensajesData[activeTab] || []
+  useEffect(() => {
+    async function fetchMessages() {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
 
-  // Filtrar mensajes
-  const filteredMensajes = mensajes.filter((mensaje) => {
-    const searchIn =
-      activeTab === "enviados"
-        ? `${mensaje.destinatario.nombre} ${mensaje.asunto}`
-        : `${mensaje.remitente.nombre} ${mensaje.asunto}`
-    return searchIn.toLowerCase().includes(searchTerm.toLowerCase())
+        if (!session) return
+
+        // Fetch received messages
+        const { data: receivedMessages, error: receivedError } = await supabase
+          .from("mensajes")
+          .select(`
+            id,
+            remitente_id,
+            destinatario_id,
+            asunto,
+            contenido,
+            fecha,
+            leido,
+            carpeta,
+            remitente:remitente_id(nombre, apellidos, rol)
+          `)
+          .eq("destinatario_id", session.user.id)
+          .eq("carpeta", "recibidos")
+          .order("fecha", { ascending: false })
+
+        if (receivedError) throw receivedError
+
+        // Fetch sent messages
+        const { data: sentMessages, error: sentError } = await supabase
+          .from("mensajes")
+          .select(`
+            id,
+            remitente_id,
+            destinatario_id,
+            asunto,
+            contenido,
+            fecha,
+            leido,
+            carpeta,
+            destinatario:destinatario_id(nombre, apellidos, rol)
+          `)
+          .eq("remitente_id", session.user.id)
+          .eq("carpeta", "enviados")
+          .order("fecha", { ascending: false })
+
+        if (sentError) throw sentError
+
+        // Combine messages
+        setMessages([...receivedMessages, ...sentMessages])
+
+        // Fetch users for new message
+        const { data: usersData, error: usersError } = await supabase
+          .from("usuarios")
+          .select("id, nombre, apellidos, rol")
+          .in("rol", ["profesor", "admin", "auxiliar"])
+          .neq("id", session.user.id)
+          .order("apellidos", { ascending: true })
+
+        if (usersError) throw usersError
+
+        setUsers(usersData)
+      } catch (error) {
+        console.error("Error fetching messages:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchMessages()
+  }, [supabase])
+
+  const handleSendMessage = async () => {
+    try {
+      setSendingMessage(true)
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) return
+
+      if (!newMessage.destinatario_id || !newMessage.asunto || !newMessage.contenido) {
+        alert("Por favor complete todos los campos")
+        return
+      }
+
+      // Insert message for sender
+      const { error: senderError } = await supabase.from("mensajes").insert({
+        remitente_id: session.user.id,
+        destinatario_id: newMessage.destinatario_id,
+        asunto: newMessage.asunto,
+        contenido: newMessage.contenido,
+        carpeta: "enviados",
+      })
+
+      if (senderError) throw senderError
+
+      // Insert message for recipient
+      const { error: recipientError } = await supabase.from("mensajes").insert({
+        remitente_id: session.user.id,
+        destinatario_id: newMessage.destinatario_id,
+        asunto: newMessage.asunto,
+        contenido: newMessage.contenido,
+        carpeta: "recibidos",
+      })
+
+      if (recipientError) throw recipientError
+
+      // Reset form and close dialog
+      setNewMessage({
+        destinatario_id: "",
+        asunto: "",
+        contenido: "",
+      })
+      setIsNewMessageOpen(false)
+
+      // Refresh messages
+      window.location.reload()
+    } catch (error) {
+      console.error("Error sending message:", error)
+      alert("Error al enviar el mensaje")
+    } finally {
+      setSendingMessage(false)
+    }
+  }
+
+  const markAsRead = async (messageId: string) => {
+    try {
+      const { error } = await supabase.from("mensajes").update({ leido: true }).eq("id", messageId)
+
+      if (error) throw error
+
+      // Update local state
+      setMessages(messages.map((msg) => (msg.id === messageId ? { ...msg, leido: true } : msg)))
+    } catch (error) {
+      console.error("Error marking message as read:", error)
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return new Intl.DateTimeFormat("es-ES", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date)
+  }
+
+  // Filter messages by folder and search query
+  const filteredMessages = messages.filter((msg) => {
+    const matchesFolder = msg.carpeta === activeFolder
+
+    if (!searchQuery) return matchesFolder
+
+    const searchLower = searchQuery.toLowerCase()
+    const senderName = msg.remitente ? `${msg.remitente.nombre} ${msg.remitente.apellidos}`.toLowerCase() : ""
+    const recipientName = msg.destinatario
+      ? `${msg.destinatario.nombre} ${msg.destinatario.apellidos}`.toLowerCase()
+      : ""
+
+    return (
+      matchesFolder &&
+      (msg.asunto.toLowerCase().includes(searchLower) ||
+        msg.contenido.toLowerCase().includes(searchLower) ||
+        senderName.includes(searchLower) ||
+        recipientName.includes(searchLower))
+    )
   })
 
-  // Filtrar por curso si se proporciona el parámetro
-  const filteredByCurso = cursoParam
-    ? filteredMensajes.filter((mensaje) => {
-        const curso = activeTab === "enviados" ? mensaje.destinatario.curso : mensaje.remitente.curso
-        return curso && curso.includes(cursoParam)
-      })
-    : filteredMensajes
-
-  // Formatear fecha
-  const formatFecha = (fechaString) => {
-    const fecha = new Date(fechaString)
-    const hoy = new Date()
-    const ayer = new Date(hoy)
-    ayer.setDate(ayer.getDate() - 1)
-
-    if (fecha.toDateString() === hoy.toDateString()) {
-      return fecha.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
-    } else if (fecha.toDateString() === ayer.toDateString()) {
-      return "Ayer"
-    } else {
-      return fecha.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" })
-    }
-  }
-
-  // Obtener iniciales para el avatar
-  const getInitials = (nombre) => {
-    return nombre
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .substring(0, 2)
-  }
-
-  // Obtener color de avatar según rol
-  const getAvatarColor = (rol) => {
-    switch (rol) {
-      case "estudiante":
-        return "bg-green-100 text-green-800"
-      case "administrador":
-        return "bg-purple-100 text-purple-800"
-      case "grupo":
-        return "bg-yellow-100 text-yellow-800"
-      case "sistema":
-        return "bg-gray-100 text-gray-800"
-      default:
-        return "bg-blue-100 text-blue-800"
-    }
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Mensajes</h1>
-          <p className="text-muted-foreground">Gestiona tus mensajes y comunicaciones.</p>
-        </div>
-        <Button asChild className="bg-gradient-to-r from-blue-600 to-blue-700">
-          <Link href="/dashboard/profesor/mensajes/nuevo">
-            <Plus className="mr-2 h-4 w-4" /> Nuevo Mensaje
-          </Link>
-        </Button>
-      </div>
+    <div className="container mx-auto">
+      <div className="flex flex-col space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <MessageSquare className="h-6 w-6 mr-2 text-blue-600" />
+            <h1 className="text-3xl font-bold text-blue-600">Mensajes</h1>
+          </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="md:col-span-1">
-          <CardHeader>
-            <CardTitle>Carpetas</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="w-full">
-              <TabsList className="flex flex-col h-auto bg-transparent p-0 w-full">
-                <TabsTrigger
-                  value="recibidos"
-                  className="justify-start px-4 py-2 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 rounded-none"
-                >
-                  <Mail className="mr-2 h-4 w-4" />
-                  <span>Recibidos</span>
-                  <Badge className="ml-auto bg-blue-100 text-blue-800 hover:bg-blue-100">
-                    {mensajesData.recibidos.length}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="enviados"
-                  className="justify-start px-4 py-2 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 rounded-none"
-                >
-                  <Mail className="mr-2 h-4 w-4" />
-                  <span>Enviados</span>
-                  <Badge className="ml-auto bg-blue-100 text-blue-800 hover:bg-blue-100">
-                    {mensajesData.enviados.length}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="archivados"
-                  className="justify-start px-4 py-2 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 rounded-none"
-                >
-                  <Archive className="mr-2 h-4 w-4" />
-                  <span>Archivados</span>
-                  <Badge className="ml-auto bg-blue-100 text-blue-800 hover:bg-blue-100">
-                    {mensajesData.archivados.length}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="papelera"
-                  className="justify-start px-4 py-2 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 rounded-none"
-                >
-                  <Trash className="mr-2 h-4 w-4" />
-                  <span>Papelera</span>
-                  <Badge className="ml-auto bg-blue-100 text-blue-800 hover:bg-blue-100">
-                    {mensajesData.papelera.length}
-                  </Badge>
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </CardContent>
-        </Card>
-
-        <Card className="md:col-span-3">
-          <CardHeader className="pb-3">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <CardTitle>
-                {activeTab === "recibidos"
-                  ? "Mensajes Recibidos"
-                  : activeTab === "enviados"
-                    ? "Mensajes Enviados"
-                    : activeTab === "archivados"
-                      ? "Mensajes Archivados"
-                      : "Papelera"}
-              </CardTitle>
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Buscar mensajes..."
-                  className="pl-8"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
+          <div className="flex items-center space-x-2">
+            <div className="relative w-64">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
+              <Input
+                placeholder="Buscar mensajes..."
+                className="pl-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
-          </CardHeader>
-          <CardContent>
-            {filteredByCurso.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">No se encontraron mensajes en esta carpeta.</div>
-            ) : (
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12"></TableHead>
-                      <TableHead>{activeTab === "enviados" ? "Destinatario" : "Remitente"}</TableHead>
-                      <TableHead>Asunto</TableHead>
-                      <TableHead className="text-right">Fecha</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredByCurso.map((mensaje) => {
-                      const persona = activeTab === "enviados" ? mensaje.destinatario : mensaje.remitente
-                      return (
-                        <TableRow
-                          key={mensaje.id}
-                          className={`cursor-pointer ${
-                            activeTab === "recibidos" && !mensaje.leido ? "font-medium bg-blue-50" : ""
-                          }`}
-                          onClick={() => {
-                            window.location.href = `/dashboard/profesor/mensajes/${mensaje.id}`
-                          }}
-                        >
-                          <TableCell className="w-12">
-                            <div className="flex items-center gap-2">
-                              {mensaje.destacado && <Star className="h-4 w-4 text-yellow-500" />}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <Avatar>
-                                <AvatarImage src={`/placeholder.svg?height=32&width=32`} alt={persona.nombre} />
-                                <AvatarFallback className={getAvatarColor(persona.rol)}>
-                                  {getInitials(persona.nombre)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <p>{persona.nombre}</p>
-                                {persona.curso && <p className="text-xs text-muted-foreground">{persona.curso}</p>}
+
+            <Dialog open={isNewMessageOpen} onOpenChange={setIsNewMessageOpen}>
+              <DialogTrigger asChild>
+                <Button className="flex items-center">
+                  <Plus className="h-4 w-4 mr-1" />
+                  Nuevo Mensaje
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[525px]">
+                <DialogHeader>
+                  <DialogTitle>Nuevo Mensaje</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="recipient">Destinatario</Label>
+                    <Select
+                      onValueChange={(value) => setNewMessage({ ...newMessage, destinatario_id: value })}
+                      value={newMessage.destinatario_id}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar destinatario" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {users.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {`${user.nombre} ${user.apellidos} (${user.rol})`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="subject">Asunto</Label>
+                    <Input
+                      id="subject"
+                      value={newMessage.asunto}
+                      onChange={(e) => setNewMessage({ ...newMessage, asunto: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="content">Mensaje</Label>
+                    <Textarea
+                      id="content"
+                      rows={6}
+                      value={newMessage.contenido}
+                      onChange={(e) => setNewMessage({ ...newMessage, contenido: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={handleSendMessage} disabled={sendingMessage} className="flex items-center">
+                    <Send className="h-4 w-4 mr-1" />
+                    {sendingMessage ? "Enviando..." : "Enviar Mensaje"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="md:col-span-1">
+            <Card>
+              <CardContent className="p-4">
+                <nav className="space-y-1">
+                  <Button
+                    variant={activeFolder === "recibidos" ? "default" : "ghost"}
+                    className="w-full justify-start"
+                    onClick={() => setActiveFolder("recibidos")}
+                  >
+                    <Inbox className="h-4 w-4 mr-2" />
+                    Recibidos
+                    <span className="ml-auto bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs">
+                      {messages.filter((m) => m.carpeta === "recibidos").length}
+                    </span>
+                  </Button>
+                  <Button
+                    variant={activeFolder === "enviados" ? "default" : "ghost"}
+                    className="w-full justify-start"
+                    onClick={() => setActiveFolder("enviados")}
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    Enviados
+                    <span className="ml-auto bg-gray-100 text-gray-800 px-2 py-0.5 rounded-full text-xs">
+                      {messages.filter((m) => m.carpeta === "enviados").length}
+                    </span>
+                  </Button>
+                  <Button
+                    variant={activeFolder === "archivados" ? "default" : "ghost"}
+                    className="w-full justify-start"
+                    onClick={() => setActiveFolder("archivados")}
+                  >
+                    <Archive className="h-4 w-4 mr-2" />
+                    Archivados
+                    <span className="ml-auto bg-gray-100 text-gray-800 px-2 py-0.5 rounded-full text-xs">
+                      {messages.filter((m) => m.carpeta === "archivados").length}
+                    </span>
+                  </Button>
+                  <Button
+                    variant={activeFolder === "papelera" ? "default" : "ghost"}
+                    className="w-full justify-start"
+                    onClick={() => setActiveFolder("papelera")}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Papelera
+                    <span className="ml-auto bg-gray-100 text-gray-800 px-2 py-0.5 rounded-full text-xs">
+                      {messages.filter((m) => m.carpeta === "papelera").length}
+                    </span>
+                  </Button>
+                </nav>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="md:col-span-3">
+            <Card className="h-full">
+              {selectedMessage ? (
+                <div className="h-full flex flex-col">
+                  <CardHeader className="border-b">
+                    <div className="flex justify-between items-center">
+                      <CardTitle>{selectedMessage.asunto}</CardTitle>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedMessage(null)}>
+                        Volver
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4 flex-1 overflow-auto">
+                    <div className="flex justify-between items-start mb-4 pb-4 border-b">
+                      <div>
+                        <div className="flex items-center">
+                          <UserIcon className="h-4 w-4 mr-2 text-gray-500" />
+                          <span className="font-medium">
+                            {activeFolder === "recibidos" && selectedMessage.remitente
+                              ? `${selectedMessage.remitente.nombre} ${selectedMessage.remitente.apellidos}`
+                              : activeFolder === "enviados" && selectedMessage.destinatario
+                                ? `Para: ${selectedMessage.destinatario.nombre} ${selectedMessage.destinatario.apellidos}`
+                                : "Usuario"}
+                          </span>
+                        </div>
+                        <div className="flex items-center mt-1 text-sm text-gray-500">
+                          <Clock className="h-3 w-3 mr-1" />
+                          {formatDate(selectedMessage.fecha)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="whitespace-pre-wrap">{selectedMessage.contenido}</div>
+                  </CardContent>
+                </div>
+              ) : (
+                <div className="h-full flex flex-col">
+                  <CardHeader className="border-b">
+                    <CardTitle>
+                      {activeFolder === "recibidos"
+                        ? "Mensajes Recibidos"
+                        : activeFolder === "enviados"
+                          ? "Mensajes Enviados"
+                          : activeFolder === "archivados"
+                            ? "Mensajes Archivados"
+                            : "Papelera"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0 flex-1 overflow-auto">
+                    {filteredMessages.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-64">
+                        <MessageSquare className="h-12 w-12 text-gray-300 mb-2" />
+                        <p className="text-gray-500">No hay mensajes en esta carpeta</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y">
+                        {filteredMessages.map((message) => (
+                          <div
+                            key={message.id}
+                            className={`p-4 hover:bg-gray-50 cursor-pointer ${!message.leido && activeFolder === "recibidos" ? "bg-blue-50" : ""}`}
+                            onClick={() => {
+                              setSelectedMessage(message)
+                              if (!message.leido && activeFolder === "recibidos") {
+                                markAsRead(message.id)
+                              }
+                            }}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="font-medium">
+                                {activeFolder === "recibidos" && message.remitente
+                                  ? `${message.remitente.nombre} ${message.remitente.apellidos}`
+                                  : activeFolder === "enviados" && message.destinatario
+                                    ? `Para: ${message.destinatario.nombre} ${message.destinatario.apellidos}`
+                                    : "Usuario"}
                               </div>
+                              <div className="text-xs text-gray-500">{formatDate(message.fecha)}</div>
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <p>{mensaje.asunto}</p>
-                              <p className="text-xs text-muted-foreground truncate max-w-xs">{mensaje.contenido}</p>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">{formatFecha(mensaje.fecha)}</TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                            <div className="font-medium mt-1">{message.asunto}</div>
+                            <div className="text-sm text-gray-600 mt-1 truncate">{message.contenido}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </div>
+              )}
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   )

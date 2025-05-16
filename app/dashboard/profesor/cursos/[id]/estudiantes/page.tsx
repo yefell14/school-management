@@ -1,240 +1,281 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import Link from "next/link"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ArrowLeft, Search, Download, Mail, Phone } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Search, ArrowUpDown, Mail, Phone, CheckSquare, ClipboardList, BarChart } from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
-export default function EstudiantesCurso({ params }: { params: { id: string } }) {
-  const cursoId = params.id
+interface Student {
+  id: string
+  nombre: string
+  apellidos: string
+  email: string
+  dni: string | null
+  telefono: string | null
+  grado: string | null
+  seccion: string | null
+}
 
-  // Datos de ejemplo
-  const curso = {
-    id: Number.parseInt(cursoId),
-    nombre: "Matemáticas",
-    grado: "6to Primaria",
-    seccion: "A",
+interface CourseInfo {
+  nombre: string
+  grado: string
+  seccion: string
+}
+
+export default function CourseStudentsPage({ params }: { params: { id: string } }) {
+  const [students, setStudents] = useState<Student[]>([])
+  const [courseInfo, setCourseInfo] = useState<CourseInfo | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
+  const supabase = createClientComponentClient()
+
+  useEffect(() => {
+    async function fetchStudents() {
+      try {
+        // Verificar que el profesor tiene acceso a este grupo
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session) {
+          setError("No hay sesión activa")
+          return
+        }
+
+        // Verificar que el profesor está asignado a este grupo
+        const { data: profesorGroup, error: profesorError } = await supabase
+          .from("grupo_profesor")
+          .select("*")
+          .eq("profesor_id", session.user.id)
+          .eq("grupo_id", params.id)
+          .maybeSingle()
+
+        if (profesorError) {
+          console.error("Error al verificar acceso del profesor:", profesorError)
+          throw profesorError
+        }
+
+        if (!profesorGroup) {
+          setError("No tienes acceso a este curso")
+          return
+        }
+
+        // Obtener información del curso
+        const { data: groupData, error: groupError } = await supabase
+          .from("grupos")
+          .select(`
+            cursos:curso_id (nombre),
+            grados:grado_id (nombre),
+            secciones:seccion_id (nombre)
+          `)
+          .eq("id", params.id)
+          .single()
+
+        if (groupError) {
+          console.error("Error al obtener información del curso:", groupError)
+          throw groupError
+        }
+
+        setCourseInfo({
+          nombre: groupData.cursos.nombre,
+          grado: groupData.grados.nombre,
+          seccion: groupData.secciones.nombre,
+        })
+
+        // Obtener estudiantes del grupo
+        const { data: groupStudents, error: studentsError } = await supabase
+          .from("grupo_alumno")
+          .select(`
+            alumno_id
+          `)
+          .eq("grupo_id", params.id)
+
+        if (studentsError) {
+          console.error("Error al obtener estudiantes del grupo:", studentsError)
+          throw studentsError
+        }
+
+        if (!groupStudents || groupStudents.length === 0) {
+          setStudents([])
+          setLoading(false)
+          return
+        }
+
+        // Extraer IDs de estudiantes
+        const studentIds = groupStudents.map((item) => item.alumno_id)
+
+        // Obtener detalles de los estudiantes
+        const { data: studentsData, error: detailsError } = await supabase
+          .from("usuarios")
+          .select("id, nombre, apellidos, email, dni, telefono, grado, seccion")
+          .in("id", studentIds)
+          .eq("rol", "alumno")
+          .order("apellidos", { ascending: true })
+
+        if (detailsError) {
+          console.error("Error al obtener detalles de estudiantes:", detailsError)
+          throw detailsError
+        }
+
+        setStudents(studentsData || [])
+      } catch (error: any) {
+        console.error("Error fetching students:", error)
+        setError(error.message || "Error al obtener los estudiantes")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchStudents()
+  }, [params.id, supabase])
+
+  // Filtrar estudiantes según la búsqueda
+  const filteredStudents = students.filter(
+    (student) =>
+      student.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      student.apellidos.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (student.dni && student.dni.toLowerCase().includes(searchQuery.toLowerCase())),
+  )
+
+  const exportToCSV = () => {
+    if (students.length === 0) return
+
+    // Crear contenido CSV
+    const headers = ["Nombre", "Apellidos", "Email", "DNI", "Teléfono"]
+    const csvContent =
+      headers.join(",") +
+      "\n" +
+      students
+        .map((student) => {
+          return [student.nombre, student.apellidos, student.email, student.dni || "", student.telefono || ""].join(",")
+        })
+        .join("\n")
+
+    // Crear y descargar el archivo
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
+    const url = URL.createObjectURL(blob)
+    link.setAttribute("href", url)
+    link.setAttribute("download", `estudiantes_${courseInfo?.nombre.replace(/\s+/g, "_")}.csv`)
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
-  const estudiantes = [
-    {
-      id: 1,
-      nombre: "Ana García",
-      email: "ana.garcia@ejemplo.com",
-      telefono: "123-456-7890",
-      asistencia: 95,
-      promedio: 92,
-    },
-    {
-      id: 2,
-      nombre: "Carlos Rodríguez",
-      email: "carlos.rodriguez@ejemplo.com",
-      telefono: "123-456-7891",
-      asistencia: 88,
-      promedio: 85,
-    },
-    {
-      id: 3,
-      nombre: "Elena Martínez",
-      email: "elena.martinez@ejemplo.com",
-      telefono: "123-456-7892",
-      asistencia: 100,
-      promedio: 95,
-    },
-    {
-      id: 4,
-      nombre: "David López",
-      email: "david.lopez@ejemplo.com",
-      telefono: "123-456-7893",
-      asistencia: 92,
-      promedio: 78,
-    },
-    {
-      id: 5,
-      nombre: "Sofía Hernández",
-      email: "sofia.hernandez@ejemplo.com",
-      telefono: "123-456-7894",
-      asistencia: 85,
-      promedio: 88,
-    },
-    {
-      id: 6,
-      nombre: "Miguel Torres",
-      email: "miguel.torres@ejemplo.com",
-      telefono: "123-456-7895",
-      asistencia: 90,
-      promedio: 82,
-    },
-    {
-      id: 7,
-      nombre: "Laura Díaz",
-      email: "laura.diaz@ejemplo.com",
-      telefono: "123-456-7896",
-      asistencia: 98,
-      promedio: 90,
-    },
-    {
-      id: 8,
-      nombre: "Javier Ruiz",
-      email: "javier.ruiz@ejemplo.com",
-      telefono: "123-456-7897",
-      asistencia: 93,
-      promedio: 87,
-    },
-  ]
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto">
+        <Alert variant="destructive" className="mb-4">
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+        <Button asChild>
+          <Link href="/dashboard/profesor">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Volver a Mis Cursos
+          </Link>
+        </Button>
+      </div>
+    )
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Link href="/dashboard/profesor/cursos" className="text-muted-foreground hover:text-primary">
-              Mis Cursos
-            </Link>
-            <span className="text-muted-foreground">/</span>
-            <Link href={`/dashboard/profesor/cursos/${cursoId}`} className="text-muted-foreground hover:text-primary">
-              {curso.nombre}
-            </Link>
-            <span className="text-muted-foreground">/</span>
-            <span>Estudiantes</span>
-          </div>
-          <h1 className="text-3xl font-bold text-primary">Estudiantes</h1>
-          <p className="text-muted-foreground">
-            {curso.nombre} - {curso.grado} Sección {curso.seccion}
-          </p>
-        </div>
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input type="search" placeholder="Buscar estudiantes..." className="w-full pl-8" />
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-xl">Lista de Estudiantes</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="relative w-full overflow-auto">
-            <table className="w-full caption-bottom text-sm">
-              <thead className="[&_tr]:border-b">
-                <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                  <th className="h-12 px-4 text-left align-middle font-medium">
-                    <div className="flex items-center space-x-1">
-                      <span>Nombre</span>
-                      <ArrowUpDown className="h-4 w-4" />
-                    </div>
-                  </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium">Contacto</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium">
-                    <div className="flex items-center space-x-1">
-                      <span>Asistencia</span>
-                      <ArrowUpDown className="h-4 w-4" />
-                    </div>
-                  </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium">
-                    <div className="flex items-center space-x-1">
-                      <span>Promedio</span>
-                      <ArrowUpDown className="h-4 w-4" />
-                    </div>
-                  </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="[&_tr:last-child]:border-0">
-                {estudiantes.map((estudiante) => (
-                  <tr
-                    key={estudiante.id}
-                    className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
-                  >
-                    <td className="p-4 align-middle font-medium">{estudiante.nombre}</td>
-                    <td className="p-4 align-middle">
-                      <div className="flex flex-col space-y-1">
-                        <div className="flex items-center text-sm">
-                          <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
-                          <span>{estudiante.email}</span>
-                        </div>
-                        <div className="flex items-center text-sm">
-                          <Phone className="mr-2 h-4 w-4 text-muted-foreground" />
-                          <span>{estudiante.telefono}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="p-4 align-middle">
-                      <div className="flex items-center">
-                        <span
-                          className={`font-medium ${
-                            estudiante.asistencia >= 90
-                              ? "text-green-600"
-                              : estudiante.asistencia >= 80
-                                ? "text-amber-600"
-                                : "text-red-600"
-                          }`}
-                        >
-                          {estudiante.asistencia}%
-                        </span>
-                      </div>
-                    </td>
-                    <td className="p-4 align-middle">
-                      <div className="flex items-center">
-                        <span
-                          className={`font-medium ${
-                            estudiante.promedio >= 90
-                              ? "text-green-600"
-                              : estudiante.promedio >= 70
-                                ? "text-amber-600"
-                                : "text-red-600"
-                          }`}
-                        >
-                          {estudiante.promedio}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="p-4 align-middle">
-                      <div className="flex space-x-2">
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/dashboard/profesor/estudiantes/${estudiante.id}/asistencias?curso=${cursoId}`}>
-                            <CheckSquare className="mr-2 h-4 w-4" />
-                            Asistencias
-                          </Link>
-                        </Button>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/dashboard/profesor/estudiantes/${estudiante.id}/tareas?curso=${cursoId}`}>
-                            <ClipboardList className="mr-2 h-4 w-4" />
-                            Tareas
-                          </Link>
-                        </Button>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link
-                            href={`/dashboard/profesor/estudiantes/${estudiante.id}/calificaciones?curso=${cursoId}`}
-                          >
-                            <BarChart className="mr-2 h-4 w-4" />
-                            Calificaciones
-                          </Link>
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex justify-between">
-        <Button variant="outline" asChild>
-          <Link href={`/dashboard/profesor/cursos/${cursoId}`}>Volver al Curso</Link>
-        </Button>
-        <div className="flex space-x-2">
-          <Button variant="outline" asChild>
-            <Link href={`/dashboard/profesor/cursos/${cursoId}/asistencias`}>
-              <CheckSquare className="mr-2 h-4 w-4" />
-              Registrar Asistencias
+    <div className="container mx-auto">
+      <div className="flex flex-col space-y-6">
+        <div className="flex items-center">
+          <Button variant="ghost" size="sm" asChild className="mr-2">
+            <Link href={`/dashboard/profesor/cursos/${params.id}`}>
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Volver
             </Link>
           </Button>
-          <Button asChild>
-            <Link href={`/dashboard/profesor/mensajes/nuevo?curso=${cursoId}`}>Enviar Mensaje</Link>
-          </Button>
+          <h1 className="text-3xl font-bold text-blue-600">Estudiantes</h1>
+          {courseInfo && (
+            <div className="ml-4 px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded-md">
+              {`${courseInfo.nombre} - ${courseInfo.grado} ${courseInfo.seccion}`}
+            </div>
+          )}
         </div>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Lista de Estudiantes</CardTitle>
+            <div className="flex items-center space-x-2">
+              <div className="relative w-64">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
+                <Input
+                  placeholder="Buscar estudiantes..."
+                  className="pl-8"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <Button variant="outline" size="sm" onClick={exportToCSV} disabled={students.length === 0}>
+                <Download className="h-4 w-4 mr-1" />
+                Exportar
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {students.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">No hay estudiantes asignados a este curso</p>
+              </div>
+            ) : (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nombre</TableHead>
+                      <TableHead>Apellidos</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>DNI</TableHead>
+                      <TableHead>Contacto</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredStudents.map((student) => (
+                      <TableRow key={student.id}>
+                        <TableCell>{student.nombre}</TableCell>
+                        <TableCell>{student.apellidos}</TableCell>
+                        <TableCell>{student.email}</TableCell>
+                        <TableCell>{student.dni || "—"}</TableCell>
+                        <TableCell>{student.telefono || "—"}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end space-x-2">
+                            <Button variant="ghost" size="icon" title="Enviar correo">
+                              <Mail className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" title="Llamar">
+                              <Phone className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

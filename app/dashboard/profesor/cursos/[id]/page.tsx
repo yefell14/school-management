@@ -1,527 +1,362 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Users, ClipboardCheck, FileText, QrCode, ArrowLeft, Star, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BookOpen, Users, ClipboardList, CheckSquare, Calendar, MessageSquare, FileText, BarChart } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
-export default function DetalleCurso({ params }: { params: { id: string } }) {
-  const cursoId = params.id
+interface CourseDetails {
+  id: string
+  nombre: string
+  descripcion: string
+  nivel: string
+  grado: string
+  seccion: string
+  año_escolar: string
+  estudiantes_count: number
+  horario: {
+    dia: string
+    hora_inicio: string
+    hora_fin: string
+    aula: string
+  }[]
+}
 
-  // Datos de ejemplo
-  const curso = {
-    id: Number.parseInt(cursoId),
-    nombre: "Matemáticas",
-    grado: "6to Primaria",
-    seccion: "A",
-    estudiantes: 28,
-    dias: ["Lunes", "Miércoles", "Viernes"],
-    horario: "08:00 - 09:30",
-    salon: "Aula 12",
-    descripcion:
-      "Curso de matemáticas para sexto grado que cubre aritmética, geometría, álgebra básica y resolución de problemas.",
+export default function CourseDetailsPage({ params }: { params: { id: string } }) {
+  const [course, setCourse] = useState<CourseDetails | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const supabase = createClientComponentClient()
+
+  useEffect(() => {
+    async function fetchCourseDetails() {
+      try {
+        // Verificar que el profesor tiene acceso a este grupo
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session) {
+          setError("No hay sesión activa")
+          return
+        }
+
+        // Verificar que el profesor está asignado a este grupo
+        const { data: profesorGroup, error: profesorError } = await supabase
+          .from("grupo_profesor")
+          .select("*")
+          .eq("profesor_id", session.user.id)
+          .eq("grupo_id", params.id)
+          .maybeSingle()
+
+        if (profesorError) {
+          console.error("Error al verificar acceso del profesor:", profesorError)
+          throw profesorError
+        }
+
+        if (!profesorGroup) {
+          setError("No tienes acceso a este curso")
+          return
+        }
+
+        // Get course details
+        const { data: groupData, error: groupError } = await supabase
+          .from("grupos")
+          .select(`
+            id,
+            año_escolar,
+            activo,
+            cursos:curso_id (
+              id,
+              nombre,
+              descripcion,
+              nivel
+            ),
+            grados:grado_id (
+              nombre
+            ),
+            secciones:seccion_id (
+              nombre
+            )
+          `)
+          .eq("id", params.id)
+          .single()
+
+        if (groupError) {
+          console.error("Error al obtener detalles del grupo:", groupError)
+          throw groupError
+        }
+
+        // Get student count
+        const { count: studentCount, error: countError } = await supabase
+          .from("grupo_alumno")
+          .select("*", { count: "exact", head: true })
+          .eq("grupo_id", params.id)
+
+        if (countError) {
+          console.error("Error al obtener conteo de estudiantes:", countError)
+        }
+
+        // Get schedule
+        const { data: scheduleData, error: scheduleError } = await supabase
+          .from("horarios")
+          .select("dia, hora_inicio, hora_fin, aula")
+          .eq("grupo_id", params.id)
+          .order("dia", { ascending: true })
+
+        if (scheduleError) {
+          console.error("Error al obtener horario:", scheduleError)
+        }
+
+        setCourse({
+          id: groupData.id,
+          nombre: groupData.cursos.nombre,
+          descripcion: groupData.cursos.descripcion || "Sin descripción",
+          nivel: groupData.cursos.nivel,
+          grado: groupData.grados.nombre,
+          seccion: groupData.secciones.nombre,
+          año_escolar: groupData.año_escolar,
+          estudiantes_count: studentCount || 0,
+          horario: scheduleData || [],
+        })
+      } catch (error: any) {
+        console.error("Error fetching course details:", error)
+        setError(error.message || "Error al obtener detalles del curso")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchCourseDetails()
+  }, [params.id, supabase])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    )
   }
 
-  const tareasRecientes = [
-    {
-      id: 1,
-      titulo: "Ejercicios de álgebra",
-      fechaAsignacion: "2023-05-10",
-      fechaEntrega: "2023-05-20",
-      estado: "Activa",
-      entregadas: 20,
-      pendientes: 8,
-    },
-    {
-      id: 2,
-      titulo: "Problemas de geometría",
-      fechaAsignacion: "2023-05-05",
-      fechaEntrega: "2023-05-15",
-      estado: "Cerrada",
-      entregadas: 25,
-      pendientes: 3,
-    },
-    {
-      id: 3,
-      titulo: "Examen parcial",
-      fechaAsignacion: "2023-04-25",
-      fechaEntrega: "2023-04-30",
-      estado: "Calificada",
-      entregadas: 28,
-      pendientes: 0,
-    },
-  ]
+  if (error) {
+    return (
+      <div className="container mx-auto">
+        <Alert variant="destructive" className="mb-4">
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+        <Button asChild>
+          <Link href="/dashboard/profesor">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Volver a Mis Cursos
+          </Link>
+        </Button>
+      </div>
+    )
+  }
 
-  const proximasClases = [
-    { id: 1, fecha: "2023-05-15", dia: "Lunes", hora: "08:00 - 09:30", tema: "Ecuaciones de primer grado" },
-    {
-      id: 2,
-      fecha: "2023-05-17",
-      dia: "Miércoles",
-      hora: "08:00 - 09:30",
-      tema: "Resolución de problemas con ecuaciones",
-    },
-    {
-      id: 3,
-      fecha: "2023-05-19",
-      dia: "Viernes",
-      hora: "08:00 - 09:30",
-      tema: "Introducción a sistemas de ecuaciones",
-    },
-  ]
-
-  const evaluaciones = [
-    { id: 1, titulo: "Examen parcial 1", fecha: "2023-04-30", tipo: "Examen", promedio: 85 },
-    { id: 2, titulo: "Ejercicios de álgebra", fecha: "2023-05-20", tipo: "Tarea", promedio: 78 },
-    { id: 3, titulo: "Participación en clase", fecha: "2023-05-01", tipo: "Participación", promedio: 90 },
-  ]
+  if (!course) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full">
+        <p className="text-red-500 mb-4">No se encontró el curso</p>
+        <Button asChild>
+          <Link href="/dashboard/profesor">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Volver a Mis Cursos
+          </Link>
+        </Button>
+      </div>
+    )
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Link href="/dashboard/profesor/cursos" className="text-muted-foreground hover:text-primary">
-              Mis Cursos
+    <div className="container mx-auto">
+      <div className="flex flex-col space-y-6">
+        <div className="flex items-center">
+          <Button variant="ghost" size="sm" asChild className="mr-2">
+            <Link href="/dashboard/profesor">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Volver
             </Link>
-            <span className="text-muted-foreground">/</span>
-            <span>{curso.nombre}</span>
+          </Button>
+          <h1 className="text-3xl font-bold text-blue-600">{course.nombre}</h1>
+          <div className="ml-4 px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded-md">
+            {`${course.grado} ${course.seccion}`}
           </div>
-          <h1 className="text-3xl font-bold text-primary">{curso.nombre}</h1>
-          <p className="text-muted-foreground">
-            {curso.grado} - Sección {curso.seccion}
-          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/dashboard/profesor/cursos/${cursoId}/estudiantes`}>
-              <Users className="mr-2 h-4 w-4" />
-              Estudiantes
-            </Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/dashboard/profesor/cursos/${cursoId}/asistencias`}>
-              <CheckSquare className="mr-2 h-4 w-4" />
-              Asistencias
-            </Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/dashboard/profesor/cursos/${cursoId}/tareas/nueva`}>
-              <ClipboardList className="mr-2 h-4 w-4" />
-              Nueva Tarea
-            </Link>
-          </Button>
-        </div>
-      </div>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-xl flex items-center">
-            <BookOpen className="mr-2 h-5 w-5 text-primary" />
-            Información del Curso
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <h3 className="font-medium text-sm text-muted-foreground mb-1">Horario</h3>
-              <p>
-                {curso.dias.join(", ")} | {curso.horario}
-              </p>
-            </div>
-            <div>
-              <h3 className="font-medium text-sm text-muted-foreground mb-1">Salón</h3>
-              <p>{curso.salon}</p>
-            </div>
-            <div>
-              <h3 className="font-medium text-sm text-muted-foreground mb-1">Estudiantes</h3>
-              <p>{curso.estudiantes} estudiantes</p>
-            </div>
-            <div className="md:col-span-3">
-              <h3 className="font-medium text-sm text-muted-foreground mb-1">Descripción</h3>
-              <p>{curso.descripcion}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle>Información del Curso</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <h3 className="font-medium text-gray-700">Descripción</h3>
+                <p className="mt-1 text-gray-600">{course.descripcion}</p>
+              </div>
 
-      <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 mb-4">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="tareas">Tareas</TabsTrigger>
-          <TabsTrigger value="evaluaciones">Evaluaciones</TabsTrigger>
-          <TabsTrigger value="asistencias">Asistencias</TabsTrigger>
-        </TabsList>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <h3 className="font-medium text-gray-700">Nivel</h3>
+                  <p className="mt-1 text-gray-600 capitalize">{course.nivel}</p>
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-700">Año Escolar</h3>
+                  <p className="mt-1 text-gray-600">{course.año_escolar}</p>
+                </div>
+              </div>
 
-        <TabsContent value="general" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center">
-                  <Calendar className="mr-2 h-5 w-5 text-primary" />
-                  Próximas Clases
-                </CardTitle>
-                <CardDescription>Calendario de clases programadas</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-3">
-                  {proximasClases.map((clase) => (
-                    <li key={clase.id} className="p-2 rounded-md hover:bg-muted">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium">{clase.tema}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {clase.dia}, {clase.fecha}
-                          </p>
-                        </div>
-                        <p className="text-sm font-medium">{clase.hora}</p>
-                      </div>
-                    </li>
+              <div>
+                <h3 className="font-medium text-gray-700">Horario</h3>
+                <div className="mt-2 space-y-2">
+                  {course.horario.map((schedule, index) => (
+                    <div key={index} className="flex items-center p-2 bg-gray-50 rounded-md">
+                      <Clock className="h-4 w-4 mr-2 text-gray-500" />
+                      <span className="capitalize">{schedule.dia}</span>
+                      <span className="mx-2">•</span>
+                      <span>{`${schedule.hora_inicio} - ${schedule.hora_fin}`}</span>
+                      <span className="mx-2">•</span>
+                      <span>Aula: {schedule.aula || "No asignada"}</span>
+                    </div>
                   ))}
-                </ul>
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center">
-                  <ClipboardList className="mr-2 h-5 w-5 text-primary" />
-                  Tareas Recientes
-                </CardTitle>
-                <CardDescription>Tareas asignadas recientemente</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-3">
-                  {tareasRecientes.map((tarea) => (
-                    <li key={tarea.id} className="p-2 rounded-md hover:bg-muted">
-                      <Link href={`/dashboard/profesor/tareas/${tarea.id}`} className="block">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="font-medium">{tarea.titulo}</p>
-                            <p className="text-sm text-muted-foreground">Entrega: {tarea.fechaEntrega}</p>
-                          </div>
-                          <span
-                            className={`text-xs px-2 py-1 rounded-full ${
-                              tarea.estado === "Activa"
-                                ? "bg-green-100 text-green-800"
-                                : tarea.estado === "Cerrada"
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-blue-100 text-blue-800"
-                            }`}
-                          >
-                            {tarea.estado}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center mt-1">
-                          <p className="text-sm">
-                            <span className="text-green-600">{tarea.entregadas}</span>
-                            <span className="text-muted-foreground"> entregadas</span>
-                          </p>
-                          {tarea.pendientes > 0 && (
-                            <p className="text-sm">
-                              <span className="text-amber-600">{tarea.pendientes}</span>
-                              <span className="text-muted-foreground"> por calificar</span>
-                            </p>
-                          )}
-                        </div>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center">
-                  <Users className="mr-2 h-5 w-5 text-primary" />
-                  Estudiantes
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-2">
-                <div className="flex justify-between items-center">
-                  <p className="text-3xl font-bold">{curso.estudiantes}</p>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/dashboard/profesor/cursos/${cursoId}/estudiantes`}>Ver Lista</Link>
-                  </Button>
+                  {course.horario.length === 0 && <p className="text-gray-500">No hay horarios asignados</p>}
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center">
-                  <MessageSquare className="mr-2 h-5 w-5 text-primary" />
-                  Mensajes
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-2">
-                <div className="flex justify-between items-center">
-                  <p className="text-3xl font-bold">5</p>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/dashboard/profesor/mensajes?curso=${cursoId}`}>Ver Mensajes</Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center">
-                  <FileText className="mr-2 h-5 w-5 text-primary" />
-                  Material
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-2">
-                <div className="flex justify-between items-center">
-                  <p className="text-3xl font-bold">8</p>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/dashboard/profesor/cursos/${cursoId}/material`}>Ver Material</Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="tareas" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Tareas y Actividades</h2>
-            <Button asChild>
-              <Link href={`/dashboard/profesor/cursos/${cursoId}/tareas/nueva`}>
-                <ClipboardList className="mr-2 h-4 w-4" />
-                Nueva Tarea
-              </Link>
-            </Button>
-          </div>
-
-          <Card>
-            <CardContent className="p-0">
-              <div className="relative w-full overflow-auto">
-                <table className="w-full caption-bottom text-sm">
-                  <thead className="[&_tr]:border-b">
-                    <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                      <th className="h-12 px-4 text-left align-middle font-medium">Título</th>
-                      <th className="h-12 px-4 text-left align-middle font-medium">Fecha Asignación</th>
-                      <th className="h-12 px-4 text-left align-middle font-medium">Fecha Entrega</th>
-                      <th className="h-12 px-4 text-left align-middle font-medium">Estado</th>
-                      <th className="h-12 px-4 text-left align-middle font-medium">Entregadas</th>
-                      <th className="h-12 px-4 text-left align-middle font-medium">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="[&_tr:last-child]:border-0">
-                    {tareasRecientes.map((tarea) => (
-                      <tr
-                        key={tarea.id}
-                        className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
-                      >
-                        <td className="p-4 align-middle">{tarea.titulo}</td>
-                        <td className="p-4 align-middle">{tarea.fechaAsignacion}</td>
-                        <td className="p-4 align-middle">{tarea.fechaEntrega}</td>
-                        <td className="p-4 align-middle">
-                          <span
-                            className={`text-xs px-2 py-1 rounded-full ${
-                              tarea.estado === "Activa"
-                                ? "bg-green-100 text-green-800"
-                                : tarea.estado === "Cerrada"
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-blue-100 text-blue-800"
-                            }`}
-                          >
-                            {tarea.estado}
-                          </span>
-                        </td>
-                        <td className="p-4 align-middle">
-                          {tarea.entregadas}/{curso.estudiantes}
-                          {tarea.pendientes > 0 && (
-                            <span className="text-amber-600 text-xs ml-2">({tarea.pendientes} por calificar)</span>
-                          )}
-                        </td>
-                        <td className="p-4 align-middle">
-                          <div className="flex space-x-2">
-                            <Button variant="outline" size="sm" asChild>
-                              <Link href={`/dashboard/profesor/tareas/${tarea.id}`}>Ver</Link>
-                            </Button>
-                            <Button variant="outline" size="sm" asChild>
-                              <Link href={`/dashboard/profesor/tareas/${tarea.id}/editar`}>Editar</Link>
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="evaluaciones" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Evaluaciones</h2>
-            <Button asChild>
-              <Link href={`/dashboard/profesor/cursos/${cursoId}/evaluaciones/nueva`}>
-                <BarChart className="mr-2 h-4 w-4" />
-                Nueva Evaluación
-              </Link>
-            </Button>
-          </div>
-
-          <Card>
-            <CardContent className="p-0">
-              <div className="relative w-full overflow-auto">
-                <table className="w-full caption-bottom text-sm">
-                  <thead className="[&_tr]:border-b">
-                    <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                      <th className="h-12 px-4 text-left align-middle font-medium">Título</th>
-                      <th className="h-12 px-4 text-left align-middle font-medium">Fecha</th>
-                      <th className="h-12 px-4 text-left align-middle font-medium">Tipo</th>
-                      <th className="h-12 px-4 text-left align-middle font-medium">Promedio</th>
-                      <th className="h-12 px-4 text-left align-middle font-medium">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="[&_tr:last-child]:border-0">
-                    {evaluaciones.map((evaluacion) => (
-                      <tr
-                        key={evaluacion.id}
-                        className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
-                      >
-                        <td className="p-4 align-middle">{evaluacion.titulo}</td>
-                        <td className="p-4 align-middle">{evaluacion.fecha}</td>
-                        <td className="p-4 align-middle">{evaluacion.tipo}</td>
-                        <td className="p-4 align-middle">
-                          <span
-                            className={`font-medium ${
-                              evaluacion.promedio >= 90
-                                ? "text-green-600"
-                                : evaluacion.promedio >= 70
-                                  ? "text-amber-600"
-                                  : "text-red-600"
-                            }`}
-                          >
-                            {evaluacion.promedio}
-                          </span>
-                        </td>
-                        <td className="p-4 align-middle">
-                          <div className="flex space-x-2">
-                            <Button variant="outline" size="sm" asChild>
-                              <Link href={`/dashboard/profesor/evaluaciones/${evaluacion.id}`}>Ver</Link>
-                            </Button>
-                            <Button variant="outline" size="sm" asChild>
-                              <Link href={`/dashboard/profesor/evaluaciones/${evaluacion.id}/editar`}>Editar</Link>
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="asistencias" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Registro de Asistencias</h2>
-            <div className="flex space-x-2">
-              <Button variant="outline" asChild>
-                <Link href={`/dashboard/profesor/cursos/${cursoId}/asistencias`}>
-                  <CheckSquare className="mr-2 h-4 w-4" />
-                  Registro Manual
-                </Link>
-              </Button>
-              <Button asChild>
-                <Link href={`/dashboard/profesor/cursos/${cursoId}/asistencias/escanear`}>Escanear QR</Link>
-              </Button>
-            </div>
-          </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>Resumen de Asistencias</CardTitle>
-              <CardDescription>Últimos 30 días</CardDescription>
+              <CardTitle>Acciones Rápidas</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <p className="text-sm text-green-600 font-medium">Asistencias</p>
-                    <p className="text-3xl font-bold text-green-700">92%</p>
-                  </div>
-                  <div className="bg-amber-50 p-4 rounded-lg">
-                    <p className="text-sm text-amber-600 font-medium">Tardanzas</p>
-                    <p className="text-3xl font-bold text-amber-700">5%</p>
-                  </div>
-                  <div className="bg-red-50 p-4 rounded-lg">
-                    <p className="text-sm text-red-600 font-medium">Ausencias</p>
-                    <p className="text-3xl font-bold text-red-700">3%</p>
-                  </div>
-                </div>
+            <CardContent className="space-y-3">
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href={`/dashboard/profesor/cursos/${course.id}/estudiantes`}>
+                  <Users className="h-4 w-4 mr-2" />
+                  Estudiantes ({course.estudiantes_count})
+                </Link>
+              </Button>
 
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Últimas Sesiones</h3>
-                  <div className="relative w-full overflow-auto">
-                    <table className="w-full caption-bottom text-sm">
-                      <thead className="[&_tr]:border-b">
-                        <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                          <th className="h-12 px-4 text-left align-middle font-medium">Fecha</th>
-                          <th className="h-12 px-4 text-left align-middle font-medium">Asistencias</th>
-                          <th className="h-12 px-4 text-left align-middle font-medium">Tardanzas</th>
-                          <th className="h-12 px-4 text-left align-middle font-medium">Ausencias</th>
-                          <th className="h-12 px-4 text-left align-middle font-medium">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody className="[&_tr:last-child]:border-0">
-                        <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                          <td className="p-4 align-middle">2023-05-12</td>
-                          <td className="p-4 align-middle text-green-600">26</td>
-                          <td className="p-4 align-middle text-amber-600">1</td>
-                          <td className="p-4 align-middle text-red-600">1</td>
-                          <td className="p-4 align-middle">
-                            <Button variant="outline" size="sm" asChild>
-                              <Link href={`/dashboard/profesor/cursos/${cursoId}/asistencias/2023-05-12`}>
-                                Ver Detalles
-                              </Link>
-                            </Button>
-                          </td>
-                        </tr>
-                        <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                          <td className="p-4 align-middle">2023-05-10</td>
-                          <td className="p-4 align-middle text-green-600">25</td>
-                          <td className="p-4 align-middle text-amber-600">2</td>
-                          <td className="p-4 align-middle text-red-600">1</td>
-                          <td className="p-4 align-middle">
-                            <Button variant="outline" size="sm" asChild>
-                              <Link href={`/dashboard/profesor/cursos/${cursoId}/asistencias/2023-05-10`}>
-                                Ver Detalles
-                              </Link>
-                            </Button>
-                          </td>
-                        </tr>
-                        <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                          <td className="p-4 align-middle">2023-05-08</td>
-                          <td className="p-4 align-middle text-green-600">27</td>
-                          <td className="p-4 align-middle text-amber-600">0</td>
-                          <td className="p-4 align-middle text-red-600">1</td>
-                          <td className="p-4 align-middle">
-                            <Button variant="outline" size="sm" asChild>
-                              <Link href={`/dashboard/profesor/cursos/${cursoId}/asistencias/2023-05-08`}>
-                                Ver Detalles
-                              </Link>
-                            </Button>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href={`/dashboard/profesor/cursos/${course.id}/asistencia`}>
+                  <ClipboardCheck className="h-4 w-4 mr-2" />
+                  Marcar Asistencia
+                </Link>
+              </Button>
+
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href={`/dashboard/profesor/cursos/${course.id}/tareas`}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Tareas y Evaluaciones
+                </Link>
+              </Button>
+
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href={`/dashboard/profesor/cursos/${course.id}/calificaciones`}>
+                  <Star className="h-4 w-4 mr-2" />
+                  Calificaciones
+                </Link>
+              </Button>
+
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href={`/dashboard/profesor/cursos/${course.id}/qr`}>
+                  <QrCode className="h-4 w-4 mr-2" />
+                  QR del Curso
+                </Link>
+              </Button>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+
+        <Tabs defaultValue="students" className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="students">Estudiantes</TabsTrigger>
+            <TabsTrigger value="attendance">Asistencia</TabsTrigger>
+            <TabsTrigger value="assignments">Tareas</TabsTrigger>
+            <TabsTrigger value="grades">Calificaciones</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="students">
+            <Card>
+              <CardHeader>
+                <CardTitle>Lista de Estudiantes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <Users className="h-12 w-12 mx-auto text-gray-300 mb-2" />
+                  <p className="text-gray-500">Haga clic en "Estudiantes" para ver la lista completa</p>
+                  <Button className="mt-4" asChild>
+                    <Link href={`/dashboard/profesor/cursos/${course.id}/estudiantes`}>Ver Estudiantes</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="attendance">
+            <Card>
+              <CardHeader>
+                <CardTitle>Registro de Asistencia</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <ClipboardCheck className="h-12 w-12 mx-auto text-gray-300 mb-2" />
+                  <p className="text-gray-500">Haga clic en "Marcar Asistencia" para registrar la asistencia de hoy</p>
+                  <Button className="mt-4" asChild>
+                    <Link href={`/dashboard/profesor/cursos/${course.id}/asistencia`}>Marcar Asistencia</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="assignments">
+            <Card>
+              <CardHeader>
+                <CardTitle>Tareas y Evaluaciones</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <FileText className="h-12 w-12 mx-auto text-gray-300 mb-2" />
+                  <p className="text-gray-500">
+                    Haga clic en "Tareas y Evaluaciones" para gestionar las actividades del curso
+                  </p>
+                  <Button className="mt-4" asChild>
+                    <Link href={`/dashboard/profesor/cursos/${course.id}/tareas`}>Gestionar Tareas</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="grades">
+            <Card>
+              <CardHeader>
+                <CardTitle>Calificaciones</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <Star className="h-12 w-12 mx-auto text-gray-300 mb-2" />
+                  <p className="text-gray-500">
+                    Haga clic en "Calificaciones" para gestionar las notas de los estudiantes
+                  </p>
+                  <Button className="mt-4" asChild>
+                    <Link href={`/dashboard/profesor/cursos/${course.id}/calificaciones`}>
+                      Gestionar Calificaciones
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   )
 }
