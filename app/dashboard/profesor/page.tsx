@@ -1,15 +1,35 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { CalendarDays, BookOpen, ClipboardList, MessageSquare, Users, CheckSquare } from "lucide-react"
+import { getCursosProfesor } from "@/lib/api"
+import { useSession } from "@/lib/hooks/use-session"
+import type { Grupo } from "@/lib/supabase"
 
 export default function ProfesorDashboard() {
-  // Datos de ejemplo
-  const cursos = [
-    { id: 1, nombre: "Matemáticas", grado: "6to Primaria", seccion: "A" },
-    { id: 2, nombre: "Ciencias Naturales", grado: "5to Primaria", seccion: "B" },
-    { id: 3, nombre: "Historia", grado: "6to Primaria", seccion: "A" },
-  ]
+  const { session } = useSession();
+  const [cursos, setCursos] = useState<Grupo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const cargarCursos = async () => {
+      if (!session?.user?.id) return;
+      
+      try {
+        const data = await getCursosProfesor(session.user.id);
+        setCursos(data);
+      } catch (error) {
+        console.error("Error al cargar cursos:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    cargarCursos();
+  }, [session?.user?.id]);
 
   const tareasRecientes = [
     { id: 1, titulo: "Ejercicios de álgebra", curso: "Matemáticas", fechaEntrega: "2023-05-20", pendientes: 5 },
@@ -29,43 +49,38 @@ export default function ProfesorDashboard() {
   ]
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-primary">Panel del Profesor</h1>
-        <div className="flex space-x-2">
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/profesor/mensajes">
-              <MessageSquare className="mr-2 h-4 w-4" />
-              Mensajes
-            </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/profesor/tareas">
-              <ClipboardList className="mr-2 h-4 w-4" />
-              Tareas
-            </Link>
-          </Button>
-        </div>
+    <div className="grid gap-4 md:gap-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 p-4 md:p-8">
+      <div className="col-span-full">
+        <h1 className="text-3xl font-bold mb-2">Bienvenido, Profesor</h1>
+        <p className="text-muted-foreground">Gestiona tus cursos, tareas y evaluaciones</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xl flex items-center">
-              <BookOpen className="mr-2 h-5 w-5 text-primary" />
-              Mis Cursos
-            </CardTitle>
-            <CardDescription>Cursos asignados actualmente</CardDescription>
-          </CardHeader>
-          <CardContent className="pb-2">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xl flex items-center">
+            <BookOpen className="mr-2 h-5 w-5 text-primary" />
+            Mis Cursos
+          </CardTitle>
+          <CardDescription>Cursos asignados actualmente</CardDescription>
+        </CardHeader>
+        <CardContent className="pb-2">
+          {loading ? (
+            <div className="flex justify-center items-center h-24">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : cursos.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">No tienes cursos asignados actualmente.</p>
+            </div>
+          ) : (
             <ul className="space-y-2">
-              {cursos.map((curso) => (
-                <li key={curso.id} className="p-2 rounded-md hover:bg-muted">
-                  <Link href={`/dashboard/profesor/cursos/${curso.id}`} className="flex justify-between items-center">
+              {cursos.map((grupo) => (
+                <li key={grupo.id} className="p-2 rounded-md hover:bg-muted">
+                  <Link href={`/dashboard/profesor/cursos/${grupo.id}`} className="flex justify-between items-center">
                     <div>
-                      <p className="font-medium">{curso.nombre}</p>
+                      <p className="font-medium">{grupo.curso?.nombre}</p>
                       <p className="text-sm text-muted-foreground">
-                        {curso.grado} - {curso.seccion}
+                        {grupo.grado?.nombre} - {grupo.seccion?.nombre}
                       </p>
                     </div>
                     <Button variant="ghost" size="sm">
@@ -75,133 +90,77 @@ export default function ProfesorDashboard() {
                 </li>
               ))}
             </ul>
-          </CardContent>
-          <CardFooter>
-            <Button variant="outline" size="sm" asChild className="w-full">
-              <Link href="/dashboard/profesor/cursos">Ver todos los cursos</Link>
-            </Button>
-          </CardFooter>
-        </Card>
+          )}
+        </CardContent>
+        <CardFooter>
+          <Button variant="outline" size="sm" asChild className="w-full">
+            <Link href="/dashboard/profesor/cursos">Ver todos los cursos</Link>
+          </Button>
+        </CardFooter>
+      </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xl flex items-center">
-              <ClipboardList className="mr-2 h-5 w-5 text-primary" />
-              Tareas Recientes
-            </CardTitle>
-            <CardDescription>Tareas asignadas recientemente</CardDescription>
-          </CardHeader>
-          <CardContent className="pb-2">
-            <ul className="space-y-2">
-              {tareasRecientes.map((tarea) => (
-                <li key={tarea.id} className="p-2 rounded-md hover:bg-muted">
-                  <Link href={`/dashboard/profesor/tareas/${tarea.id}`} className="block">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xl flex items-center">
+            <ClipboardList className="mr-2 h-5 w-5 text-primary" />
+            Tareas Pendientes
+          </CardTitle>
+          <CardDescription>Tareas por revisar y calificar</CardDescription>
+        </CardHeader>
+        <CardContent className="pb-2">
+          <ul className="space-y-2">
+            {tareasRecientes.map((tarea) => (
+              <li key={tarea.id} className="p-2 rounded-md hover:bg-muted">
+                <Link href={`/dashboard/profesor/tareas/${tarea.id}`} className="flex justify-between items-center">
+                  <div>
                     <p className="font-medium">{tarea.titulo}</p>
-                    <div className="flex justify-between items-center">
-                      <p className="text-sm text-muted-foreground">{tarea.curso}</p>
-                      <p className="text-sm text-muted-foreground">Entrega: {tarea.fechaEntrega}</p>
-                    </div>
-                    <p className="text-sm text-amber-600">{tarea.pendientes} pendientes por calificar</p>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-          <CardFooter>
-            <Button variant="outline" size="sm" asChild className="w-full">
-              <Link href="/dashboard/profesor/tareas">Ver todas las tareas</Link>
-            </Button>
-          </CardFooter>
-        </Card>
+                    <p className="text-sm text-muted-foreground">
+                      {tarea.curso} - {tarea.pendientes} pendientes
+                    </p>
+                  </div>
+                  <Button variant="ghost" size="sm">
+                    Ver
+                  </Button>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+        <CardFooter>
+          <Button variant="outline" size="sm" asChild className="w-full">
+            <Link href="/dashboard/profesor/tareas">Ver todas las tareas</Link>
+          </Button>
+        </CardFooter>
+      </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xl flex items-center">
-              <CalendarDays className="mr-2 h-5 w-5 text-primary" />
-              Próximas Clases
-            </CardTitle>
-            <CardDescription>Horario de clases próximas</CardDescription>
-          </CardHeader>
-          <CardContent className="pb-2">
-            <ul className="space-y-2">
-              {proximasClases.map((clase) => (
-                <li key={clase.id} className="p-2 rounded-md hover:bg-muted">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xl flex items-center">
+            <CalendarDays className="mr-2 h-5 w-5 text-primary" />
+            Próximas Clases
+          </CardTitle>
+          <CardDescription>Horario de clases para hoy</CardDescription>
+        </CardHeader>
+        <CardContent className="pb-2">
+          <ul className="space-y-2">
+            {proximasClases.map((clase) => (
+              <li key={clase.id} className="p-2 rounded-md hover:bg-muted">
+                <div>
                   <p className="font-medium">{clase.curso}</p>
                   <p className="text-sm text-muted-foreground">
-                    {clase.grado} - {clase.seccion}
+                    {clase.grado} {clase.seccion} - {clase.hora}
                   </p>
-                  <div className="flex justify-between items-center mt-1">
-                    <p className="text-sm font-medium text-primary">{clase.dia}</p>
-                    <p className="text-sm text-muted-foreground">{clase.hora}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-          <CardFooter>
-            <div className="flex space-x-2 w-full">
-              <Button variant="outline" size="sm" className="flex-1" asChild>
-                <Link href="/dashboard/profesor/asistencias">
-                  <CheckSquare className="mr-2 h-4 w-4" />
-                  Asistencias
-                </Link>
-              </Button>
-              <Button variant="outline" size="sm" className="flex-1" asChild>
-                <Link href="/dashboard/profesor/cursos">
-                  <Users className="mr-2 h-4 w-4" />
-                  Estudiantes
-                </Link>
-              </Button>
-            </div>
-          </CardFooter>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl flex items-center">
-              <CheckSquare className="mr-2 h-5 w-5 text-primary" />
-              Registro de Asistencias
-            </CardTitle>
-            <CardDescription>Registra asistencias para tus clases</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-4">
-              Puedes registrar asistencias de forma manual o escaneando el código QR de los estudiantes.
-            </p>
-            <div className="grid grid-cols-2 gap-4">
-              <Button variant="outline" asChild>
-                <Link href="/dashboard/profesor/asistencias">Registro Manual</Link>
-              </Button>
-              <Button asChild>
-                <Link href="/dashboard/profesor/asistencias/escanear">Escanear QR</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl flex items-center">
-              <MessageSquare className="mr-2 h-5 w-5 text-primary" />
-              Comunicación
-            </CardTitle>
-            <CardDescription>Mantente en contacto con tus estudiantes</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-4">Envía mensajes a tus estudiantes y revisa los mensajes recibidos.</p>
-            <div className="grid grid-cols-2 gap-4">
-              <Button variant="outline" asChild>
-                <Link href="/dashboard/profesor/mensajes">Ver Mensajes</Link>
-              </Button>
-              <Button asChild>
-                <Link href="/dashboard/profesor/mensajes/nuevo">Nuevo Mensaje</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+        <CardFooter>
+          <Button variant="outline" size="sm" asChild className="w-full">
+            <Link href="/dashboard/profesor/horario">Ver horario completo</Link>
+          </Button>
+        </CardFooter>
+      </Card>
     </div>
   )
 }

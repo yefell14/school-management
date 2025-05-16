@@ -71,15 +71,16 @@ export default function RegistroPage() {
         password,
       })
 
-      if (authError) {
-        throw new Error(`Error al crear la cuenta: ${authError.message}`)
+      if (authError || !authData.user) {
+        throw new Error(`Error al crear la cuenta: ${authError?.message || "Usuario no creado"}`)
       }
 
-      // Crear usuario en la tabla usuarios
+      // Crear usuario en la tabla usuarios usando el mismo ID que Auth
       const { data: userData, error: userError } = await supabase
         .from("usuarios")
         .insert([
           {
+            id: authData.user.id, // Usar el ID de Auth como ID del usuario
             nombre: tokenData.nombre,
             apellidos: tokenData.apellidos,
             email,
@@ -95,6 +96,8 @@ export default function RegistroPage() {
         .single()
 
       if (userError) {
+        // Si hay error al crear el usuario en la tabla, eliminar el usuario de Auth
+        await supabase.auth.admin.deleteUser(authData.user.id)
         throw new Error(`Error al crear el usuario: ${userError.message}`)
       }
 

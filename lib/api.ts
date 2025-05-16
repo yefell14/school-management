@@ -303,7 +303,9 @@ export async function getGrupos(filtro?: {
     curso:cursos(*),
     grado:grados(*),
     seccion:secciones(*),
-    profesor:usuarios(*)
+    grupo_profesor(
+      profesor:profesor_id(*)
+    )
   `)
 
   if (filtro?.curso_id) {
@@ -326,11 +328,6 @@ export async function getGrupos(filtro?: {
     query = query.eq("activo", filtro.activo)
   }
 
-  // Búsqueda en relaciones
-  if (filtro?.busqueda) {
-    // Esto es más complejo en Supabase, podríamos filtrar después de obtener los datos
-  }
-
   const { data, error } = await query
 
   if (error) {
@@ -347,16 +344,34 @@ export async function getGrupos(filtro?: {
         grupo.curso?.nombre.toLowerCase().includes(searchTerm) ||
         grupo.grado?.nombre.toLowerCase().includes(searchTerm) ||
         grupo.seccion?.nombre.toLowerCase().includes(searchTerm) ||
-        grupo.profesor?.nombre.toLowerCase().includes(searchTerm) ||
-        grupo.profesor?.apellidos.toLowerCase().includes(searchTerm),
+        grupo.grupo_profesor?.[0]?.profesor?.nombre.toLowerCase().includes(searchTerm) ||
+        grupo.grupo_profesor?.[0]?.profesor?.apellidos.toLowerCase().includes(searchTerm)
     )
   }
 
-  return filteredData
+  // Transformar los datos para mantener la compatibilidad con la interfaz actual
+  return filteredData.map(grupo => ({
+    ...grupo,
+    profesor: grupo.grupo_profesor?.[0]?.profesor
+  }))
 }
 
 export async function createGrupo(grupo: Omit<Grupo, "id">) {
-  const { data, error } = await supabase.from("grupos").insert([grupo]).select()
+  // Solo insertar los campos necesarios para el grupo
+  const grupoData = {
+    curso_id: grupo.curso_id,
+    grado_id: grupo.grado_id,
+    seccion_id: grupo.seccion_id,
+    año_escolar: grupo.año_escolar,
+    activo: grupo.activo
+  }
+
+  const { data, error } = await supabase.from("grupos").insert([grupoData]).select(`
+    *,
+    curso:cursos(*),
+    grado:grados(*),
+    seccion:secciones(*)
+  `)
 
   if (error) {
     console.error("Error creating grupo:", error)
@@ -566,5 +581,40 @@ export async function getEstadisticasDashboard() {
       gruposActivos: 0,
       eventosProximos: [],
     }
+  }
+}
+
+// Obtener cursos asignados a un profesor
+export async function getCursosProfesor(auth_id: string) {
+  try {
+    // Primero obtener el ID del usuario de la tabla usuarios
+    const { data: usuario, error: userError } = await supabase
+      .from("usuarios")
+      .select("id")
+      .eq("auth_id", auth_id)
+      .single();
+
+    if (userError) throw userError;
+    if (!usuario) throw new Error("Usuario no encontrado");
+
+    // Luego obtener los grupos usando el ID correcto
+    const { data, error } = await supabase
+      .from("grupos")
+      .select(`
+        *,
+        curso:cursos(*),
+        grado:grados(*),
+        seccion:secciones(*),
+        grupo_profesor!inner(profesor_id)
+      `)
+      .eq("grupo_profesor.profesor_id", usuario.id)
+      .eq("activo", true);
+
+    if (error) throw error;
+
+    return data || [];
+  } catch (error) {
+    console.error("Error fetching cursos del profesor:", error);
+    throw error;
   }
 }

@@ -3,7 +3,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 1. Tablas base
 CREATE TABLE IF NOT EXISTS usuarios (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
     apellidos VARCHAR(100) NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
@@ -47,7 +47,6 @@ CREATE TABLE IF NOT EXISTS grupos (
     curso_id UUID NOT NULL REFERENCES cursos(id),
     grado_id UUID NOT NULL REFERENCES grados(id),
     seccion_id UUID NOT NULL REFERENCES secciones(id),
-    profesor_id UUID REFERENCES usuarios(id),
     año_escolar VARCHAR(10) NOT NULL,
     activo BOOLEAN DEFAULT TRUE
 );

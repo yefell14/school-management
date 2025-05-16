@@ -36,6 +36,10 @@ import type { Grupo, Curso, Grado, Seccion, Usuario } from "@/lib/supabase"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 
+interface GrupoWithProfesorId extends Grupo {
+  profesor_id?: string;
+}
+
 export default function GruposPage() {
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
@@ -46,12 +50,17 @@ export default function GruposPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isAsignarAlumnosDialogOpen, setIsAsignarAlumnosDialogOpen] = useState(false)
   const [isAsignarProfesorDialogOpen, setIsAsignarProfesorDialogOpen] = useState(false)
-  const [currentGrupo, setCurrentGrupo] = useState<Grupo | null>(null)
-  const [newGrupo, setNewGrupo] = useState({
+  const [currentGrupo, setCurrentGrupo] = useState<GrupoWithProfesorId | null>(null)
+  const [newGrupo, setNewGrupo] = useState<{
+    curso_id: string;
+    grado_id: string;
+    seccion_id: string;
+    año_escolar: string;
+    activo: boolean;
+  }>({
     curso_id: "",
     grado_id: "",
     seccion_id: "",
-    profesor_id: null, // Cambiado de string vacío a null
     año_escolar: new Date().getFullYear().toString(),
     activo: true,
   })
@@ -167,15 +176,8 @@ export default function GruposPage() {
     try {
       setSubmitting(true)
 
-      // Preparar el objeto de grupo
-      const grupoToCreate = {
-        ...newGrupo,
-        // Si el profesor_id es "sin_profesor" o vacío, lo establecemos como null
-        profesor_id: newGrupo.profesor_id === "sin_profesor" || !newGrupo.profesor_id ? null : newGrupo.profesor_id,
-      }
-
       // Crear el grupo
-      const nuevoGrupo = await createGrupo(grupoToCreate)
+      const nuevoGrupo = await createGrupo(newGrupo)
 
       // Crear sala virtual para el grupo
       if (nuevoGrupo && nuevoGrupo.id) {
@@ -189,22 +191,11 @@ export default function GruposPage() {
             titulo: `Sala virtual - ${cursos.find((c) => c.id === nuevoGrupo.curso_id)?.nombre || "Curso"} - ${grados.find((g) => g.id === nuevoGrupo.grado_id)?.nombre || "Grado"} ${secciones.find((s) => s.id === nuevoGrupo.seccion_id)?.nombre || "Sección"}`,
             descripcion: `Sala virtual para el grupo de ${cursos.find((c) => c.id === nuevoGrupo.curso_id)?.nombre || "Curso"}`,
             enlace: enlaceAleatorio,
-            creado_por: nuevoGrupo.profesor_id || null,
           },
         ])
-
-        // Si hay un profesor asignado, crear la relación en grupo_profesor
-        if (nuevoGrupo.profesor_id) {
-          await supabase.from("grupo_profesor").insert([
-            {
-              grupo_id: nuevoGrupo.id,
-              profesor_id: nuevoGrupo.profesor_id,
-            },
-          ])
-        }
       }
 
-      // Recargar los grupos para obtener las relaciones completas
+      // Recargar los grupos
       const updatedGrupos = await getGrupos()
       setGrupos(updatedGrupos)
 
@@ -220,7 +211,6 @@ export default function GruposPage() {
         curso_id: "",
         grado_id: "",
         seccion_id: "",
-        profesor_id: null, // Cambiado de string vacío a null
         año_escolar: new Date().getFullYear().toString(),
         activo: true,
       })
@@ -382,51 +372,80 @@ export default function GruposPage() {
 
   // Manejar asignación de profesor
   const handleAsignarProfesor = async () => {
-    if (!currentGrupo) return
+    if (!currentGrupo) return;
 
     try {
-      setSubmitting(true)
+      setSubmitting(true);
 
-      // Actualizar el profesor del grupo
-      await updateGrupo(currentGrupo.id, {
-        profesor_id: currentGrupo.profesor_id === "sin_profesor" ? null : currentGrupo.profesor_id,
-      })
+      // Primero, eliminar cualquier asignación existente
+      await supabase
+        .from("grupo_profesor")
+        .delete()
+        .eq("grupo_id", currentGrupo.id);
 
-      // Actualizar la relación en grupo_profesor
-      // Primero eliminar cualquier relación existente
-      await supabase.from("grupo_profesor").delete().eq("grupo_id", currentGrupo.id)
-
-      // Si hay un profesor asignado, crear la nueva relación
-      if (currentGrupo.profesor_id && currentGrupo.profesor_id !== "sin_profesor") {
-        await supabase.from("grupo_profesor").insert([
-          {
+      // Si se seleccionó un profesor (no "sin_profesor"), crear la nueva asignación
+      if (currentGrupo.profesor_id !== "sin_profesor") {
+        const { error: insertError } = await supabase
+          .from("grupo_profesor")
+          .insert({
             grupo_id: currentGrupo.id,
-            profesor_id: currentGrupo.profesor_id,
-          },
-        ])
+            profesor_id: currentGrupo.profesor_id
+          });
+
+        if (insertError) {
+          throw insertError;
+        }
       }
 
-      // Recargar los grupos
-      const updatedGrupos = await getGrupos()
-      setGrupos(updatedGrupos)
+      // Obtener el grupo actualizado
+      const { data: grupoActualizado, error: selectError } = await supabase
+        .from("grupos")
+        .select(`
+          *,
+          curso:cursos(*),
+          grado:grados(*),
+          seccion:secciones(*),
+          grupo_profesor(
+            profesor:profesor_id(*)
+          )
+        `)
+        .eq("id", currentGrupo.id)
+        .single();
 
+      if (selectError) {
+        throw selectError;
+      }
+
+      if (grupoActualizado) {
+        setGrupos(prevGrupos =>
+          prevGrupos.map(grupo =>
+            grupo.id === currentGrupo.id
+              ? {
+                  ...grupoActualizado,
+                  profesor: grupoActualizado.grupo_profesor?.[0]?.profesor
+                }
+              : grupo
+          )
+        );
+      }
+
+      setIsAsignarProfesorDialogOpen(false);
+      
       toast({
         title: "Profesor asignado",
         description: "El profesor ha sido asignado exitosamente al grupo",
-      })
-
-      setIsAsignarProfesorDialogOpen(false)
+      });
     } catch (error) {
-      console.error("Error al asignar profesor:", error)
+      console.error("Error al asignar profesor:", error);
       toast({
         title: "Error",
-        description: "No se pudo asignar el profesor al grupo",
+        description: "No se pudo asignar el profesor al grupo. Por favor, inténtelo de nuevo.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
 
   // Manejar selección de alumnos
   const handleAlumnoSeleccionado = (alumnoId, checked) => {
@@ -497,8 +516,7 @@ export default function GruposPage() {
                 <DialogHeader>
                   <DialogTitle>Crear Grupo</DialogTitle>
                   <DialogDescription>
-                    Crea un nuevo grupo académico. Al crear un grupo, se generará automáticamente una sala virtual y un
-                    código QR para el curso.
+                    Crea un nuevo grupo académico. Al crear un grupo, se generará automáticamente una sala virtual.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
@@ -554,28 +572,6 @@ export default function GruposPage() {
                         {secciones.map((seccion) => (
                           <SelectItem key={seccion.id} value={seccion.id}>
                             {seccion.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="profesor">Profesor</Label>
-                    <Select
-                      value={newGrupo.profesor_id || "sin_profesor"}
-                      onValueChange={(value) =>
-                        setNewGrupo({ ...newGrupo, profesor_id: value === "sin_profesor" ? null : value })
-                      }
-                      disabled={loadingOptions}
-                    >
-                      <SelectTrigger id="profesor">
-                        <SelectValue placeholder={loadingOptions ? "Cargando..." : "Seleccionar profesor"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="sin_profesor">Sin profesor asignado</SelectItem>
-                        {profesores.map((profesor) => (
-                          <SelectItem key={profesor.id} value={profesor.id}>
-                            {profesor.nombre} {profesor.apellidos}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -673,7 +669,10 @@ export default function GruposPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          setCurrentGrupo(grupo)
+                          setCurrentGrupo({
+                            ...grupo,
+                            profesor_id: grupo.profesor?.id || "sin_profesor"
+                          })
                           setIsAsignarProfesorDialogOpen(true)
                         }}
                       >
@@ -894,7 +893,12 @@ export default function GruposPage() {
                 <Label htmlFor="profesor-grupo">Profesor</Label>
                 <Select
                   value={currentGrupo.profesor_id || "sin_profesor"}
-                  onValueChange={(value) => setCurrentGrupo({ ...currentGrupo, profesor_id: value })}
+                  onValueChange={(value) =>
+                    setCurrentGrupo({
+                      ...currentGrupo,
+                      profesor_id: value,
+                    })
+                  }
                   disabled={loadingOptions}
                 >
                   <SelectTrigger id="profesor-grupo">

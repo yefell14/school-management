@@ -51,13 +51,15 @@ export type Grupo = {
   curso_id: string
   grado_id: string
   seccion_id: string
-  profesor_id?: string
   año_escolar: string
   activo: boolean
   curso?: Curso
   grado?: Grado
   seccion?: Seccion
   profesor?: Usuario
+  grupo_profesor?: {
+    profesor: Usuario
+  }
 }
 
 export type RegistroToken = {
