@@ -121,10 +121,6 @@ export default function LoginPage() {
           <div className="text-center text-sm text-gray-500">
             <span>Credenciales de prueba:</span>
             <ul className="mt-1">
-              <li>Admin: admin@example.com / password</li>
-              <li>Profesor: profesor@example.com / password</li>
-              <li>Alumno: alumno@example.com / password</li>
-              <li>Auxiliar: auxiliar@example.com / password</li>
             </ul>
           </div>
           <div className="text-center text-sm">
