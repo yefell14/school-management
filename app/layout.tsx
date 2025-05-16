@@ -8,9 +8,9 @@ import { AuthProvider } from "@/components/auth-provider"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Sistema Escolar María de los Ángeles",
-  description: "Sistema de gestión escolar para la institución María de los Ángeles",
-    generator: 'v0.dev'
+  title: "María de los Ángeles - Gestión Administrativa",
+  description: "Sistema de gestión escolar María de los Ángeles",
+  generator: 'v0.dev'
 }
 
 export default function RootLayout({
@@ -19,10 +19,12 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="es">
+    <html lang="es" suppressHydrationWarning>
       <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <AuthProvider>{children}</AuthProvider>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

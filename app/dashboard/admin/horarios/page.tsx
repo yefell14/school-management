@@ -28,16 +28,45 @@ import { Plus, MoreVertical, Edit, Trash, Loader2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { supabase } from "@/lib/supabase"
 
+interface Grupo {
+  id: string
+  curso: { nombre: string }
+  grado: { nombre: string }
+  seccion: { nombre: string }
+  profesor: { nombre: string; apellidos: string }
+}
+
+interface Horario {
+  id: string
+  grupo_id: string
+  dia: string
+  hora_inicio: string
+  hora_fin: string
+  aula: string
+}
+
+type Dia = 'lunes' | 'martes' | 'miércoles' | 'jueves' | 'viernes' | 'sábado' | 'domingo'
+
+const diasSemana: Record<Dia, string> = {
+  lunes: 'Lunes',
+  martes: 'Martes',
+  miércoles: 'Miércoles',
+  jueves: 'Jueves',
+  viernes: 'Viernes',
+  sábado: 'Sábado',
+  domingo: 'Domingo'
+}
+
 export default function HorariosPage() {
   const { toast } = useToast()
-  const [grupos, setGrupos] = useState([])
+  const [grupos, setGrupos] = useState<Grupo[]>([])
   const [selectedGrupo, setSelectedGrupo] = useState("")
-  const [horarios, setHorarios] = useState([])
+  const [horarios, setHorarios] = useState<Horario[]>([])
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [currentHorario, setCurrentHorario] = useState(null)
-  const [newHorario, setNewHorario] = useState({
+  const [currentHorario, setCurrentHorario] = useState<Horario | null>(null)
+  const [newHorario, setNewHorario] = useState<Omit<Horario, 'id'>>({
     grupo_id: "",
     dia: "lunes",
     hora_inicio: "08:00",
@@ -59,14 +88,23 @@ export default function HorariosPage() {
           .from("grupos")
           .select(`
             id,
-            curso:cursos(nombre),
-            grado:grados(nombre),
-            seccion:secciones(nombre),
-            profesor:usuarios(nombre, apellidos)
+            curso:cursos!inner(nombre),
+            grado:grados!inner(nombre),
+            seccion:secciones!inner(nombre),
+            profesor:usuarios!inner(nombre, apellidos)
           `)
           .eq("activo", true)
+          .order("id")
+          .returns<Grupo[]>()
 
-        if (error) throw error
+        if (error) {
+          console.error("Error detallado:", error)
+          throw error
+        }
+
+        if (!data || data.length === 0) {
+          console.log("No se encontraron grupos activos")
+        }
 
         setGrupos(data || [])
       } catch (error) {
@@ -236,25 +274,15 @@ export default function HorariosPage() {
   }
 
   // Función para formatear el nombre del día
-  const formatDia = (dia) => {
-    const dias = {
-      lunes: "Lunes",
-      martes: "Martes",
-      miércoles: "Miércoles",
-      jueves: "Jueves",
-      viernes: "Viernes",
-      sábado: "Sábado",
-      domingo: "Domingo",
-    }
-    return dias[dia] || dia
+  const formatDia = (dia: Dia): string => {
+    return diasSemana[dia] || dia
   }
 
   // Función para obtener el nombre del grupo
-  const getGrupoNombre = (grupoId) => {
-    const grupo = grupos.find((g) => g.id === grupoId)
-    if (!grupo) return ""
-
-    return `${grupo.curso?.nombre || ""} - ${grupo.grado?.nombre || ""} ${grupo.seccion?.nombre || ""}`
+  const getGrupoNombre = (grupoId: string): string => {
+    const grupo = grupos.find(g => g.id === grupoId)
+    if (!grupo) return 'Grupo no encontrado'
+    return `${grupo.curso.nombre} - ${grupo.grado.nombre} ${grupo.seccion.nombre}`
   }
 
   return (
@@ -401,7 +429,7 @@ export default function HorariosPage() {
                 <TableBody>
                   {horarios.map((horario) => (
                     <TableRow key={horario.id}>
-                      <TableCell className="font-medium">{formatDia(horario.dia)}</TableCell>
+                      <TableCell className="font-medium">{formatDia(horario.dia as Dia)}</TableCell>
                       <TableCell>{horario.hora_inicio}</TableCell>
                       <TableCell>{horario.hora_fin}</TableCell>
                       <TableCell>{horario.aula || "-"}</TableCell>
@@ -534,7 +562,7 @@ export default function HorariosPage() {
           {currentHorario && (
             <div className="py-4">
               <p>
-                Estás a punto de eliminar el horario del día <strong>{formatDia(currentHorario.dia)}</strong> de{" "}
+                Estás a punto de eliminar el horario del día <strong>{formatDia(currentHorario.dia as Dia)}</strong> de{" "}
                 <strong>{currentHorario.hora_inicio}</strong> a <strong>{currentHorario.hora_fin}</strong>.
               </p>
             </div>

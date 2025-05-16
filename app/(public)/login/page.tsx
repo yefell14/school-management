@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -10,11 +9,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { useAuth } from "@/components/auth-provider"
+import { getSupabaseBrowser } from "@/lib/supabase-browser"
 
 export default function LoginPage() {
   const router = useRouter()
-  const { signIn } = useAuth()
+  const supabase = getSupabaseBrowser()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
@@ -26,8 +25,38 @@ export default function LoginPage() {
     setError("")
 
     try {
-      await signIn(email, password)
-      // La redirección se maneja en el AuthProvider
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (signInError) throw signInError
+
+      const { data: userData, error: userError } = await supabase
+        .from("usuarios")
+        .select("rol")
+        .eq("id", data.user.id)
+        .single()
+
+      if (userError) throw userError
+
+      // Redirect based on user role
+      switch (userData.rol) {
+        case "admin":
+          router.push("/dashboard/admin")
+          break
+        case "profesor":
+          router.push("/dashboard/profesor")
+          break
+        case "alumno":
+          router.push("/dashboard/alumno")
+          break
+        case "auxiliar":
+          router.push("/dashboard/auxiliar")
+          break
+        default:
+          throw new Error("Rol de usuario no válido")
+      }
     } catch (err: any) {
       setError(err.message || "Ocurrió un error al iniciar sesión. Por favor, intente nuevamente.")
     } finally {
