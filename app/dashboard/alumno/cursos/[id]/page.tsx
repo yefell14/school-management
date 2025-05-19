@@ -1,230 +1,364 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { useAuth } from "@/contexts/auth-context"
+import { supabase, type Grupo, type Tarea, type Usuario } from "@/lib/supabase"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BookOpen, Users, Clock, FileText } from "lucide-react"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Calendar, ClipboardList, QrCode } from "lucide-react"
 import Link from "next/link"
 
-export default function DetalleCurso({ params }: { params: { id: string } }) {
-  const cursoId = Number.parseInt(params.id)
+export default function CursoDetailPage({ params }: { params: { id: string } }) {
+  const { user } = useAuth()
+  const [curso, setCurso] = useState<
+    | (Grupo & {
+        curso: { nombre: string; descripcion: string | null }
+        grado: { nombre: string }
+        seccion: { nombre: string }
+      })
+    | null
+  >(null)
+  const [profesor, setProfesor] = useState<Usuario | null>(null)
+  const [tareas, setTareas] = useState<Tarea[]>([])
+  const [compañeros, setCompañeros] = useState<Usuario[]>([])
+  const [horarios, setHorarios] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // Datos de ejemplo para el curso
-  const curso = {
-    id: cursoId,
-    nombre: "Matemáticas",
-    profesor: "Prof. García",
-    grado: "Secundaria",
-    seccion: "A",
-    horario: "Lunes y Miércoles, 8:00 AM - 9:30 AM",
-    aula: "101",
-    progreso: 75,
-    descripcion: "Curso de matemáticas avanzadas que cubre álgebra, geometría y cálculo básico.",
-    temas: [
-      "Ecuaciones lineales y cuadráticas",
-      "Funciones y gráficas",
-      "Geometría analítica",
-      "Trigonometría",
-      "Introducción al cálculo",
-    ],
-    tareas: [
-      { id: 1, titulo: "Ecuaciones Diferenciales", fecha: "15 Mayo, 2023", estado: "Pendiente" },
-      { id: 2, titulo: "Ejercicios de Álgebra", fecha: "5 Mayo, 2023", estado: "Completada", nota: "85/100" },
-      { id: 3, titulo: "Problemas de Geometría", fecha: "28 Abril, 2023", estado: "Completada", nota: "90/100" },
-      { id: 4, titulo: "Examen Parcial", fecha: "20 Abril, 2023", estado: "Completada", nota: "88/100" },
-    ],
-    materiales: [
-      { id: 1, titulo: "Libro de Texto: Matemáticas Avanzadas", tipo: "PDF" },
-      { id: 2, titulo: "Presentación: Ecuaciones Diferenciales", tipo: "PPT" },
-      { id: 3, titulo: "Ejercicios Prácticos", tipo: "PDF" },
-      { id: 4, titulo: "Video: Resolución de Problemas", tipo: "Video" },
-    ],
-    anuncios: [
-      {
-        id: 1,
-        titulo: "Cambio de horario",
-        fecha: "10 Mayo, 2023",
-        contenido: "La clase del miércoles 17 de mayo se adelantará a las 7:30 AM.",
-      },
-      {
-        id: 2,
-        titulo: "Examen Final",
-        fecha: "5 Mayo, 2023",
-        contenido: "El examen final se realizará el 15 de junio a las 9:00 AM en el aula 101.",
-      },
-    ],
+  useEffect(() => {
+    const fetchCursoDetails = async () => {
+      if (!user) return
+
+      try {
+        // Fetch course details
+        const { data: grupoData, error: grupoError } = await supabase
+          .from("grupos")
+          .select(`
+            id,
+            año_escolar,
+            curso:cursos(id, nombre, descripcion),
+            grado:grados(id, nombre),
+            seccion:secciones(id, nombre)
+          `)
+          .eq("id", params.id)
+          .single()
+
+        if (grupoError) throw grupoError
+        setCurso(grupoData as any)
+
+        // Fetch professor
+        const { data: profesorData, error: profesorError } = await supabase
+          .from("grupo_profesor")
+          .select(`
+            profesor:profesor_id(id, nombre, apellidos, email)
+          `)
+          .eq("grupo_id", params.id)
+          .single()
+
+        if (!profesorError && profesorData) {
+          setProfesor(profesorData.profesor as Usuario)
+        }
+
+        // Fetch tasks
+        const { data: tareasData, error: tareasError } = await supabase
+          .from("tareas")
+          .select("*")
+          .eq("grupo_id", params.id)
+          .order("fecha_entrega", { ascending: false })
+
+        if (!tareasError) {
+          setTareas(tareasData)
+        }
+
+        // Fetch classmates
+        const { data: compañerosData, error: compañerosError } = await supabase
+          .from("grupo_alumno")
+          .select(`
+            alumno:alumno_id(id, nombre, apellidos)
+          `)
+          .eq("grupo_id", params.id)
+
+        if (!compañerosError) {
+          setCompañeros(compañerosData.map((item) => item.alumno) as Usuario[])
+        }
+
+        // Fetch schedule
+        const { data: horariosData, error: horariosError } = await supabase
+          .from("horarios")
+          .select("*")
+          .eq("grupo_id", params.id)
+          .order("dia", { ascending: true })
+          .order("hora_inicio", { ascending: true })
+
+        if (!horariosError) {
+          setHorarios(horariosData)
+        }
+      } catch (error) {
+        console.error("Error fetching course details:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchCursoDetails()
+  }, [user, params.id])
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+      </div>
+    )
+  }
+
+  if (!curso) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center">
+        <h2 className="text-2xl font-bold">Curso no encontrado</h2>
+        <p className="text-muted-foreground">El curso que buscas no existe o no tienes acceso</p>
+        <Link href="/alumno/cursos">
+          <Button className="mt-4">Volver a mis cursos</Button>
+        </Link>
+      </div>
+    )
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return new Intl.DateTimeFormat("es-ES", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(date)
+  }
+
+  const diasOrden = {
+    lunes: 1,
+    martes: 2,
+    miércoles: 3,
+    jueves: 4,
+    viernes: 5,
+    sábado: 6,
+    domingo: 7,
+  }
+
+  const formatDia = (dia: string) => {
+    return dia.charAt(0).toUpperCase() + dia.slice(1)
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{curso.nombre}</h1>
-          <p className="text-muted-foreground">
-            {curso.grado} - Sección {curso.seccion}
-          </p>
+      <div className="flex flex-col space-y-2">
+        <div className="flex items-center space-x-2">
+          <Link href="/alumno/cursos">
+            <Button variant="ghost" size="sm">
+              ← Volver
+            </Button>
+          </Link>
+          <h1 className="text-3xl font-bold tracking-tight">{curso.curso.nombre}</h1>
         </div>
-        <Button variant="outline" asChild>
-          <Link href="/dashboard/alumno/cursos">Volver a Cursos</Link>
-        </Button>
+        <p className="text-muted-foreground">
+          {curso.grado.nombre} - {curso.seccion.nombre} | Año escolar: {curso.año_escolar}
+        </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Información del Curso</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <Users className="h-4 w-4 text-muted-foreground" />
-              <span>{curso.profesor}</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span>{curso.horario}</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <BookOpen className="h-4 w-4 text-muted-foreground" />
-              <span>Aula: {curso.aula}</span>
-            </div>
-            <div className="space-y-1">
-              <div className="text-sm flex justify-between">
-                <span>Progreso</span>
-                <span>{curso.progreso}%</span>
-              </div>
-              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-blue-500 to-blue-700 rounded-full"
-                  style={{ width: `${curso.progreso}%` }}
-                ></div>
-              </div>
-            </div>
-            <div className="pt-2">
-              <h4 className="font-medium mb-2">Descripción</h4>
-              <p className="text-sm text-muted-foreground">{curso.descripcion}</p>
-            </div>
-          </CardContent>
-        </Card>
+      <Tabs defaultValue="details" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="details">Detalles</TabsTrigger>
+          <TabsTrigger value="schedule">Horario</TabsTrigger>
+          <TabsTrigger value="tasks">Tareas</TabsTrigger>
+          <TabsTrigger value="students">Compañeros</TabsTrigger>
+          <TabsTrigger value="attendance">Asistencia</TabsTrigger>
+        </TabsList>
 
-        <div className="md:col-span-2">
-          <Tabs defaultValue="temas" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="temas">Temas</TabsTrigger>
-              <TabsTrigger value="tareas">Tareas</TabsTrigger>
-              <TabsTrigger value="materiales">Materiales</TabsTrigger>
-              <TabsTrigger value="anuncios">Anuncios</TabsTrigger>
-            </TabsList>
+        <TabsContent value="details" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Información del curso</CardTitle>
+              <CardDescription>Detalles generales del curso</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <h3 className="font-semibold">Descripción</h3>
+                <p className="text-sm text-muted-foreground">
+                  {curso.curso.descripcion || "Este curso no tiene una descripción disponible."}
+                </p>
+              </div>
 
-            <TabsContent value="temas" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Temas del Curso</CardTitle>
-                  <CardDescription>Contenido que se cubrirá durante el semestre</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {curso.temas.map((tema, index) => (
-                      <li key={index} className="flex items-center space-x-2">
-                        <div className="h-2 w-2 rounded-full bg-blue-500"></div>
-                        <span>{tema}</span>
-                      </li>
+              {profesor && (
+                <div>
+                  <h3 className="font-semibold">Profesor</h3>
+                  <div className="mt-2 flex items-center space-x-4">
+                    <Avatar>
+                      <AvatarFallback>
+                        {profesor.nombre.charAt(0)}
+                        {profesor.apellidos.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-medium">
+                        {profesor.nombre} {profesor.apellidos}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{profesor.email}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="schedule" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Horario de clases</CardTitle>
+              <CardDescription>Horario semanal del curso</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {horarios.length > 0 ? (
+                <div className="space-y-4">
+                  {Object.entries(
+                    horarios.reduce(
+                      (acc, horario) => {
+                        if (!acc[horario.dia]) {
+                          acc[horario.dia] = []
+                        }
+                        acc[horario.dia].push(horario)
+                        return acc
+                      },
+                      {} as Record<string, any[]>,
+                    ),
+                  )
+                    .sort(
+                      ([diaA], [diaB]) =>
+                        diasOrden[diaA as keyof typeof diasOrden] - diasOrden[diaB as keyof typeof diasOrden],
+                    )
+                    .map(([dia, horariosDia]) => (
+                      <div key={dia} className="rounded-lg border p-4">
+                        <h3 className="mb-2 font-semibold">{formatDia(dia)}</h3>
+                        <div className="space-y-2">
+                          {horariosDia.map((horario) => (
+                            <div
+                              key={horario.id}
+                              className="flex items-center justify-between rounded-md bg-muted p-2 text-sm"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <Calendar className="h-4 w-4 text-muted-foreground" />
+                                <span>
+                                  {horario.hora_inicio} - {horario.hora_fin}
+                                </span>
+                              </div>
+                              <div>Aula: {horario.aula || "No especificada"}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">No hay horarios disponibles para este curso</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-            <TabsContent value="tareas" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Tareas del Curso</CardTitle>
-                  <CardDescription>Tareas asignadas y completadas</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {curso.tareas.map((tarea) => (
-                      <div key={tarea.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex items-start space-x-3">
-                          <div
-                            className={`p-2 rounded-full ${
-                              tarea.estado === "Pendiente" ? "bg-yellow-100" : "bg-green-100"
+        <TabsContent value="tasks" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Tareas asignadas</CardTitle>
+              <CardDescription>Listado de tareas del curso</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {tareas.length > 0 ? (
+                <div className="space-y-4">
+                  {tareas.map((tarea) => (
+                    <div key={tarea.id} className="flex items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-1">
+                        <p className="font-medium">{tarea.titulo}</p>
+                        <div className="flex items-center text-sm text-muted-foreground">
+                          <ClipboardList className="mr-1 h-4 w-4" />
+                          <span>Fecha de entrega: {formatDate(tarea.fecha_entrega)}</span>
+                        </div>
+                        <div className="flex items-center">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                              tarea.estado === "pendiente"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : tarea.estado === "completada"
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-blue-100 text-blue-800"
                             }`}
                           >
-                            <FileText
-                              className={`h-4 w-4 ${
-                                tarea.estado === "Pendiente" ? "text-yellow-700" : "text-green-700"
-                              }`}
-                            />
-                          </div>
-                          <div>
-                            <p className="font-medium">{tarea.titulo}</p>
-                            <p className="text-sm text-muted-foreground">Fecha: {tarea.fecha}</p>
-                            {tarea.nota && <p className="text-sm text-green-600">Calificación: {tarea.nota}</p>}
-                          </div>
+                            {tarea.estado === "pendiente"
+                              ? "Pendiente"
+                              : tarea.estado === "completada"
+                                ? "Completada"
+                                : "Calificada"}
+                          </span>
                         </div>
-                        <Button size="sm" variant={tarea.estado === "Pendiente" ? "default" : "outline"}>
-                          {tarea.estado === "Pendiente" ? "Entregar" : "Ver Detalles"}
+                      </div>
+                      <Link href={`/alumno/tareas/${tarea.id}`}>
+                        <Button variant="outline" size="sm">
+                          Ver tarea
                         </Button>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground">No hay tareas asignadas para este curso</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-            <TabsContent value="materiales" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Materiales del Curso</CardTitle>
-                  <CardDescription>Recursos de aprendizaje disponibles</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {curso.materiales.map((material) => (
-                      <div key={material.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex items-start space-x-3">
-                          <div className="bg-blue-100 p-2 rounded-full">
-                            <BookOpen className="h-4 w-4 text-blue-700" />
-                          </div>
-                          <div>
-                            <p className="font-medium">{material.titulo}</p>
-                            <p className="text-sm text-muted-foreground">Tipo: {material.tipo}</p>
-                          </div>
-                        </div>
-                        <Button size="sm" variant="outline">
-                          Descargar
-                        </Button>
-                      </div>
-                    ))}
+        <TabsContent value="students" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Compañeros de clase</CardTitle>
+              <CardDescription>Estudiantes inscritos en este curso</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                {compañeros.map((compañero) => (
+                  <div key={compañero.id} className="flex items-center space-x-4 rounded-lg border p-3">
+                    <Avatar>
+                      <AvatarFallback>
+                        {compañero.nombre.charAt(0)}
+                        {compañero.apellidos.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-medium">
+                        {compañero.nombre} {compañero.apellidos}
+                      </p>
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-            <TabsContent value="anuncios" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Anuncios del Curso</CardTitle>
-                  <CardDescription>Comunicados importantes del profesor</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {curso.anuncios.map((anuncio) => (
-                      <div key={anuncio.id} className="p-4 border rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="font-bold">{anuncio.titulo}</h3>
-                          <span className="text-sm text-muted-foreground">{anuncio.fecha}</span>
-                        </div>
-                        <p className="text-sm">{anuncio.contenido}</p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </div>
-      </div>
+        <TabsContent value="attendance" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Marcar asistencia</CardTitle>
+              <CardDescription>Escanea el código QR para registrar tu asistencia</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center justify-center space-y-4 p-6">
+              <div className="rounded-lg border border-dashed p-8">
+                <QrCode className="h-32 w-32 text-muted-foreground" />
+              </div>
+              <Button>Escanear código QR</Button>
+              <p className="text-center text-sm text-muted-foreground">
+                Solicita a tu profesor que genere un código QR para marcar tu asistencia a la clase
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

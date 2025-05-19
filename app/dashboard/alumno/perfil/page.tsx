@@ -1,283 +1,276 @@
 "use client"
 
+import { useState } from "react"
+import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { User, Mail, Calendar, BookOpen, QrCode, Lock, Save, ArrowLeft } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { User, Lock, QrCode, Phone, Mail, MapPin, Calendar } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
-export default function PerfilAlumno() {
-  const router = useRouter()
+export default function PerfilPage() {
+  const { user } = useAuth()
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(false)
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [changingPassword, setChangingPassword] = useState(false)
 
-  // Datos de ejemplo para el perfil
-  const [perfil, setPerfil] = useState({
-    nombre: "Juan",
-    apellidos: "Pérez García",
-    email: "juan.perez@estudiante.ma.edu",
-    telefono: "123-456-7890",
-    direccion: "Calle Principal 123, Ciudad",
-    fechaNacimiento: "2005-05-15",
-    grado: "Secundaria - 3°",
-    seccion: "A",
-    id: "ALU-2023-001",
-    fechaIngreso: "2020-08-15",
-  })
+  const handleChangePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Por favor completa todos los campos",
+        variant: "destructive",
+      })
+      return
+    }
 
-  const [contrasena, setContrasena] = useState({
-    actual: "",
-    nueva: "",
-    confirmar: "",
-  })
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Las contraseñas nuevas no coinciden",
+        variant: "destructive",
+      })
+      return
+    }
 
-  const handlePerfilChange = (e) => {
-    const { name, value } = e.target
-    setPerfil((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
+    setChangingPassword(true)
+
+    try {
+      // First verify current password
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user?.email || "",
+        password: currentPassword,
+      })
+
+      if (signInError) {
+        throw new Error("La contraseña actual es incorrecta")
+      }
+
+      // Then update password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      })
+
+      if (updateError) throw updateError
+
+      toast({
+        title: "Contraseña actualizada",
+        description: "Tu contraseña ha sido actualizada correctamente",
+      })
+
+      // Reset form
+      setCurrentPassword("")
+      setNewPassword("")
+      setConfirmPassword("")
+      setChangePasswordOpen(false)
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo actualizar la contraseña",
+        variant: "destructive",
+      })
+    } finally {
+      setChangingPassword(false)
+    }
   }
 
-  const handleContrasenaChange = (e) => {
-    const { name, value } = e.target
-    setContrasena((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
+  if (!user) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+      </div>
+    )
+  }
+
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return "No disponible"
+
+    const date = new Date(dateString)
+    return new Intl.DateTimeFormat("es-ES", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(date)
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => router.back()}
-            className="h-9 w-9"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span className="sr-only">Regresar</span>
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Mi Perfil</h1>
-            <p className="text-muted-foreground">Gestiona tu información personal y configuración</p>
-          </div>
-        </div>
+      <div className="flex flex-col space-y-2">
+        <h1 className="text-3xl font-bold tracking-tight">Mi Perfil</h1>
+        <p className="text-muted-foreground">Gestiona tu información personal y configuración</p>
       </div>
 
-      <Tabs defaultValue="informacion" className="space-y-4">
+      <Tabs defaultValue="info" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="informacion">Información Personal</TabsTrigger>
-          <TabsTrigger value="academica">Información Académica</TabsTrigger>
-          <TabsTrigger value="seguridad">Seguridad</TabsTrigger>
-          <TabsTrigger value="qr">Mi Código QR</TabsTrigger>
+          <TabsTrigger value="info">Información Personal</TabsTrigger>
+          <TabsTrigger value="security">Seguridad</TabsTrigger>
+          <TabsTrigger value="qr">Mi QR</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="informacion" className="space-y-4">
+        <TabsContent value="info" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Información Personal</CardTitle>
-              <CardDescription>Actualiza tu información de contacto y datos personales</CardDescription>
+              <CardDescription>Datos de tu perfil de estudiante</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-col md:flex-row md:space-x-4 space-y-4 md:space-y-0">
-                <div className="md:w-1/3 flex justify-center">
-                  <div className="text-center">
-                    <div className="w-32 h-32 rounded-full bg-gray-200 mx-auto flex items-center justify-center overflow-hidden">
-                      <User className="h-16 w-16 text-gray-500" />
-                    </div>
-                    <Button variant="outline" size="sm" className="mt-4">
-                      Cambiar Foto
-                    </Button>
-                  </div>
+            <CardContent className="space-y-6">
+              <div className="flex flex-col sm:flex-row items-center gap-6">
+                <Avatar className="h-24 w-24">
+                  <AvatarFallback className="text-2xl">
+                    {user.nombre.charAt(0)}
+                    {user.apellidos.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="space-y-1 text-center sm:text-left">
+                  <h3 className="text-2xl font-semibold">
+                    {user.nombre} {user.apellidos}
+                  </h3>
+                  <p className="text-muted-foreground">Estudiante</p>
                 </div>
-                <div className="md:w-2/3 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="nombre">Nombre</Label>
-                      <Input id="nombre" name="nombre" value={perfil.nombre} onChange={handlePerfilChange} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="apellidos">Apellidos</Label>
-                      <Input id="apellidos" name="apellidos" value={perfil.apellidos} onChange={handlePerfilChange} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Correo Electrónico</Label>
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        value={perfil.email}
-                        onChange={handlePerfilChange}
-                        disabled
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="telefono">Teléfono</Label>
-                      <Input id="telefono" name="telefono" value={perfil.telefono} onChange={handlePerfilChange} />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="direccion">Dirección</Label>
-                      <Textarea
-                        id="direccion"
-                        name="direccion"
-                        value={perfil.direccion}
-                        onChange={handlePerfilChange}
-                        rows={3}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="fechaNacimiento">Fecha de Nacimiento</Label>
-                      <Input
-                        id="fechaNacimiento"
-                        name="fechaNacimiento"
-                        type="date"
-                        value={perfil.fechaNacimiento}
-                        onChange={handlePerfilChange}
-                      />
-                    </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <div className="flex items-center text-sm">
+                    <User className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Nombre completo</span>
                   </div>
-                  <div className="flex justify-end">
-                    <Button>
-                      <Save className="mr-2 h-4 w-4" />
-                      Guardar Cambios
-                    </Button>
+                  <p>
+                    {user.nombre} {user.apellidos}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center text-sm">
+                    <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Correo electrónico</span>
                   </div>
+                  <p>{user.email}</p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center text-sm">
+                    <Phone className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Teléfono</span>
+                  </div>
+                  <p>{user.telefono || "No disponible"}</p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center text-sm">
+                    <MapPin className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Dirección</span>
+                  </div>
+                  <p>{user.direccion || "No disponible"}</p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center text-sm">
+                    <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Fecha de registro</span>
+                  </div>
+                  <p>{formatDate(user.fecha_registro)}</p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center text-sm">
+                    <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Último acceso</span>
+                  </div>
+                  <p>{formatDate(user.ultimo_acceso)}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="academica" className="space-y-4">
+        <TabsContent value="security" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Información Académica</CardTitle>
-              <CardDescription>Detalles de tu información académica</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-2">
-                      <BookOpen className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm font-medium">Grado</p>
-                        <p className="text-sm text-muted-foreground">{perfil.grado}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <User className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm font-medium">Sección</p>
-                        <p className="text-sm text-muted-foreground">{perfil.seccion}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Calendar className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm font-medium">Fecha de Ingreso</p>
-                        <p className="text-sm text-muted-foreground">{perfil.fechaIngreso}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-2">
-                      <Mail className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm font-medium">Correo Institucional</p>
-                        <p className="text-sm text-muted-foreground">{perfil.email}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <User className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm font-medium">ID de Estudiante</p>
-                        <p className="text-sm text-muted-foreground">{perfil.id}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-t pt-6">
-                  <h3 className="font-medium mb-4">Historial Académico</h3>
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="font-medium">2022-2023</h4>
-                        <span className="text-sm text-green-600 font-medium">Promedio: 8.7</span>
-                      </div>
-                      <p className="text-sm text-muted-foreground">Secundaria - 2° A</p>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="font-medium">2021-2022</h4>
-                        <span className="text-sm text-green-600 font-medium">Promedio: 8.5</span>
-                      </div>
-                      <p className="text-sm text-muted-foreground">Secundaria - 1° A</p>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="font-medium">2020-2021</h4>
-                        <span className="text-sm text-green-600 font-medium">Promedio: 8.9</span>
-                      </div>
-                      <p className="text-sm text-muted-foreground">Primaria - 6° B</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="seguridad" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Cambiar Contraseña</CardTitle>
-              <CardDescription>Actualiza tu contraseña de acceso al sistema</CardDescription>
+              <CardTitle>Seguridad</CardTitle>
+              <CardDescription>Gestiona la seguridad de tu cuenta</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-4 max-w-md">
-                <div className="space-y-2">
-                  <Label htmlFor="contrasenaActual">Contraseña Actual</Label>
-                  <Input
-                    id="contrasenaActual"
-                    name="actual"
-                    type="password"
-                    value={contrasena.actual}
-                    onChange={handleContrasenaChange}
-                  />
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <div className="flex items-center">
+                    <Lock className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Contraseña</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Actualiza tu contraseña regularmente para mayor seguridad
+                  </p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="contrasenaNueva">Nueva Contraseña</Label>
-                  <Input
-                    id="contrasenaNueva"
-                    name="nueva"
-                    type="password"
-                    value={contrasena.nueva}
-                    onChange={handleContrasenaChange}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="contrasenaConfirmar">Confirmar Nueva Contraseña</Label>
-                  <Input
-                    id="contrasenaConfirmar"
-                    name="confirmar"
-                    type="password"
-                    value={contrasena.confirmar}
-                    onChange={handleContrasenaChange}
-                  />
-                </div>
-                <div className="pt-2">
-                  <Button>
-                    <Lock className="mr-2 h-4 w-4" />
-                    Cambiar Contraseña
-                  </Button>
-                </div>
+                <Dialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline">Cambiar contraseña</Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                      <DialogTitle>Cambiar contraseña</DialogTitle>
+                      <DialogDescription>Ingresa tu contraseña actual y la nueva contraseña</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="grid gap-2">
+                        <label htmlFor="current-password" className="text-sm font-medium">
+                          Contraseña actual
+                        </label>
+                        <Input
+                          id="current-password"
+                          type="password"
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <label htmlFor="new-password" className="text-sm font-medium">
+                          Nueva contraseña
+                        </label>
+                        <Input
+                          id="new-password"
+                          type="password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <label htmlFor="confirm-password" className="text-sm font-medium">
+                          Confirmar nueva contraseña
+                        </label>
+                        <Input
+                          id="confirm-password"
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setChangePasswordOpen(false)}>
+                        Cancelar
+                      </Button>
+                      <Button onClick={handleChangePassword} disabled={changingPassword}>
+                        {changingPassword ? "Actualizando..." : "Actualizar contraseña"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
             </CardContent>
           </Card>
@@ -286,59 +279,17 @@ export default function PerfilAlumno() {
         <TabsContent value="qr" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Mi Código QR Personal</CardTitle>
-              <CardDescription>Utiliza este código para registrar tu asistencia en clases</CardDescription>
+              <CardTitle>Mi Código QR</CardTitle>
+              <CardDescription>Utiliza este código QR para marcar tu asistencia</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col items-center">
-              <div className="bg-white p-6 rounded-lg shadow-md border-2 border-blue-200 w-64 text-center mb-6">
-                <h3 className="font-bold text-lg mb-2">{`${perfil.nombre} ${perfil.apellidos}`}</h3>
-                <div className="bg-gray-200 w-48 h-48 mx-auto flex items-center justify-center">
-                  <svg viewBox="0 0 100 100" className="w-40 h-40">
-                    <path d="M30,30 L30,45 L45,45 L45,30 Z" fill="#000" />
-                    <path d="M50,30 L50,45 L65,45 L65,30 Z" fill="#000" />
-                    <path d="M70,30 L70,45 L85,45 L85,30 Z" fill="#000" />
-                    <path d="M30,50 L30,65 L45,65 L45,50 Z" fill="#000" />
-                    <path d="M50,50 L50,65 L65,65 L65,50 Z" fill="#000" />
-                    <path d="M70,50 L70,65 L85,65 L85,50 Z" fill="#000" />
-                    <path d="M30,70 L30,85 L45,85 L45,70 Z" fill="#000" />
-                    <path d="M50,70 L50,85 L65,85 L65,70 Z" fill="#000" />
-                    <path d="M70,70 L70,85 L85,85 L85,70 Z" fill="#000" />
-                  </svg>
-                </div>
-                <p className="text-sm mt-2">ID: {perfil.id}</p>
-                <p className="text-sm text-muted-foreground">{`${perfil.grado} - ${perfil.seccion}`}</p>
+            <CardContent className="flex flex-col items-center justify-center p-6">
+              <div className="rounded-lg border border-dashed p-8">
+                <QrCode className="h-48 w-48" />
               </div>
-
-              <div className="space-y-4 w-full max-w-md">
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <h4 className="font-medium flex items-center">
-                    <QrCode className="h-4 w-4 mr-2 text-blue-700" />
-                    Instrucciones de uso
-                  </h4>
-                  <ul className="mt-2 space-y-2 text-sm">
-                    <li className="flex items-start">
-                      <span className="bg-blue-200 text-blue-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-2 mt-0.5">
-                        1
-                      </span>
-                      <span>Muestra este código QR al profesor al inicio de cada clase.</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="bg-blue-200 text-blue-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-2 mt-0.5">
-                        2
-                      </span>
-                      <span>El profesor escaneará el código con la aplicación de asistencia.</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="bg-blue-200 text-blue-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-2 mt-0.5">
-                        3
-                      </span>
-                      <span>Tu asistencia quedará registrada automáticamente en el sistema.</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <Button className="w-full">Descargar Código QR</Button>
-              </div>
+              <p className="mt-4 text-center text-sm text-muted-foreground">
+                Muestra este código QR a tu profesor para registrar tu asistencia a clases
+              </p>
+              <Button className="mt-4">Descargar QR</Button>
             </CardContent>
           </Card>
         </TabsContent>

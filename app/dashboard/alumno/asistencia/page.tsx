@@ -1,274 +1,314 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { useAuth } from "@/contexts/auth-context"
+import { supabase, type Asistencia, type Grupo } from "@/lib/supabase"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { QrCode, Search } from "lucide-react"
-import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useState } from "react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Calendar, CheckCircle2, XCircle, Clock, QrCode } from "lucide-react"
+import { QRScanner } from "@/components/qr-scanner"
 
-export default function AsistenciaAlumno() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filtroCurso, setFiltroCurso] = useState("todos")
-  const [filtroEstado, setFiltroEstado] = useState("todos")
+export default function AsistenciaPage() {
+  const { user } = useAuth()
+  const [asistencias, setAsistencias] = useState<Asistencia[]>([])
+  const [cursos, setCursos] = useState<(Grupo & { curso: { nombre: string } })[]>([])
+  const [selectedCurso, setSelectedCurso] = useState<string>("all")
+  const [loading, setLoading] = useState(true)
+  const [qrScannerOpen, setQrScannerOpen] = useState(false)
 
-  // Datos de ejemplo para la asistencia
-  const registrosAsistencia = [
-    { id: 1, fecha: "12 Mayo, 2023", curso: "Matemáticas", estado: "Presente", hora: "8:05 AM" },
-    { id: 2, fecha: "11 Mayo, 2023", curso: "Historia", estado: "Presente", hora: "9:50 AM" },
-    { id: 3, fecha: "11 Mayo, 2023", curso: "Ciencias", estado: "Presente", hora: "2:03 PM" },
-    { id: 4, fecha: "10 Mayo, 2023", curso: "Literatura", estado: "Ausente", hora: "-" },
-    { id: 5, fecha: "10 Mayo, 2023", curso: "Inglés", estado: "Presente", hora: "11:32 AM" },
-    { id: 6, fecha: "9 Mayo, 2023", curso: "Educación Física", estado: "Tardanza", hora: "8:15 AM" },
-    { id: 7, fecha: "8 Mayo, 2023", curso: "Matemáticas", estado: "Presente", hora: "8:02 AM" },
-    { id: 8, fecha: "8 Mayo, 2023", curso: "Historia", estado: "Presente", hora: "9:48 AM" },
-    { id: 9, fecha: "7 Mayo, 2023", curso: "Ciencias", estado: "Ausente", hora: "-" },
-    { id: 10, fecha: "7 Mayo, 2023", curso: "Literatura", estado: "Presente", hora: "11:30 AM" },
-  ]
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user) return
 
-  // Filtrar registros según los criterios
-  const registrosFiltrados = registrosAsistencia.filter(
-    (registro) =>
-      (registro.fecha.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        registro.curso.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (filtroCurso === "todos" || registro.curso === filtroCurso) &&
-      (filtroEstado === "todos" || registro.estado === filtroEstado),
+      try {
+        // Fetch student's courses
+        const { data: gruposData, error: gruposError } = await supabase
+          .from("grupo_alumno")
+          .select(`
+            grupo_id,
+            grupo:grupos(
+              id,
+              curso:cursos(id, nombre)
+            )
+          `)
+          .eq("alumno_id", user.id)
+
+        if (gruposError) throw gruposError
+
+        const gruposFormatted = gruposData.map((item) => ({
+          id: item.grupo.id,
+          curso_id: item.grupo.curso.id,
+          curso: item.grupo.curso,
+          grado_id: "",
+          seccion_id: "",
+          año_escolar: "",
+          activo: true,
+        }))
+
+        setCursos(gruposFormatted)
+
+        // Fetch attendance records
+        const { data: asistenciasData, error: asistenciasError } = await supabase
+          .from("asistencias")
+          .select(`
+            *,
+            grupo:grupo_id(
+              curso:cursos(nombre)
+            )
+          `)
+          .eq("estudiante_id", user.id)
+          .order("fecha", { ascending: false })
+
+        if (asistenciasError) throw asistenciasError
+        setAsistencias(asistenciasData)
+      } catch (error) {
+        console.error("Error fetching attendance data:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [user])
+
+  const filteredAsistencias =
+    selectedCurso === "all" ? asistencias : asistencias.filter((asistencia) => asistencia.grupo_id === selectedCurso)
+
+  // Group attendance by month
+  const asistenciasPorMes = filteredAsistencias.reduce(
+    (acc, asistencia) => {
+      const fecha = new Date(asistencia.fecha)
+      const mes = fecha.toLocaleString("es-ES", { month: "long", year: "numeric" })
+
+      if (!acc[mes]) {
+        acc[mes] = []
+      }
+
+      acc[mes].push(asistencia)
+      return acc
+    },
+    {} as Record<string, Asistencia[]>,
   )
 
-  // Calcular estadísticas
-  const totalRegistros = registrosAsistencia.length
-  const presentes = registrosAsistencia.filter((r) => r.estado === "Presente").length
-  const ausentes = registrosAsistencia.filter((r) => r.estado === "Ausente").length
-  const tardanzas = registrosAsistencia.filter((r) => r.estado === "Tardanza").length
+  // Calculate statistics
+  const totalAsistencias = filteredAsistencias.length
+  const presentes = filteredAsistencias.filter((a) => a.estado === "presente").length
+  const ausentes = filteredAsistencias.filter((a) => a.estado === "ausente").length
+  const tardanzas = filteredAsistencias.filter((a) => a.estado === "tardanza").length
+  const justificados = filteredAsistencias.filter((a) => a.estado === "justificado").length
 
-  const porcentajeAsistencia = Math.round((presentes / totalRegistros) * 100)
+  const porcentajeAsistencia = totalAsistencias > 0 ? Math.round((presentes / totalAsistencias) * 100) : 0
 
-  // Lista de cursos para el filtro
-  const cursos = ["Matemáticas", "Historia", "Ciencias", "Literatura", "Inglés", "Educación Física"]
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+      </div>
+    )
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return new Intl.DateTimeFormat("es-ES", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(date)
+  }
+
+  const getEstadoIcon = (estado: string) => {
+    switch (estado) {
+      case "presente":
+        return <CheckCircle2 className="h-5 w-5 text-green-500" />
+      case "ausente":
+        return <XCircle className="h-5 w-5 text-red-500" />
+      case "tardanza":
+        return <Clock className="h-5 w-5 text-yellow-500" />
+      case "justificado":
+        return <CheckCircle2 className="h-5 w-5 text-blue-500" />
+      default:
+        return null
+    }
+  }
+
+  const getEstadoText = (estado: string) => {
+    switch (estado) {
+      case "presente":
+        return "Presente"
+      case "ausente":
+        return "Ausente"
+      case "tardanza":
+        return "Tardanza"
+      case "justificado":
+        return "Justificado"
+      default:
+        return estado
+    }
+  }
+
+  const handleQRSuccess = (data: string) => {
+    console.log("QR Code scanned:", data)
+    // The QRScanner component will handle the attendance registration
+  }
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex flex-col space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Mi Asistencia</h1>
-        <p className="text-muted-foreground">Gestiona y visualiza tu registro de asistencia</p>
+        <p className="text-muted-foreground">Consulta tu registro de asistencia a clases</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="flex flex-col sm:flex-row items-start gap-4">
+        <div className="w-full sm:w-64">
+          <label htmlFor="curso-filter" className="text-sm font-medium">
+            Filtrar por curso
+          </label>
+          <Select value={selectedCurso} onValueChange={setSelectedCurso}>
+            <SelectTrigger id="curso-filter" className="mt-1">
+              <SelectValue placeholder="Todos los cursos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los cursos</SelectItem>
+              {cursos.map((curso) => (
+                <SelectItem key={curso.id} value={curso.id}>
+                  {curso.curso.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex-1 w-full">
+          <Card className="w-full">
+            <CardHeader>
+              <CardTitle>Marcar asistencia</CardTitle>
+              <CardDescription>Escanea el código QR para registrar tu asistencia</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center justify-center p-6">
+              <Button className="gap-2" onClick={() => setQrScannerOpen(true)}>
+                <QrCode className="h-4 w-4" />
+                Escanear QR
+              </Button>
+              <p className="mt-4 text-center text-sm text-muted-foreground">
+                Solicita a tu profesor que genere un código QR para marcar tu asistencia a la clase
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <Dialog open={qrScannerOpen} onOpenChange={setQrScannerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Escanear código QR</DialogTitle>
+            <DialogDescription>
+              Escanea el código QR proporcionado por tu profesor para registrar tu asistencia
+            </DialogDescription>
+          </DialogHeader>
+          {user && <QRScanner userId={user.id} onSuccess={handleQRSuccess} onClose={() => setQrScannerOpen(false)} />}
+        </DialogContent>
+      </Dialog>
+
+      <div className="grid gap-6 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Asistencia Total</CardTitle>
+            <CardTitle className="text-sm font-medium">Asistencia</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{porcentajeAsistencia}%</div>
-            <div className="mt-1 h-2 w-full bg-gray-200 rounded-full overflow-hidden">
-              <div className="h-full bg-green-500 rounded-full" style={{ width: `${porcentajeAsistencia}%` }}></div>
+            <p className="text-xs text-muted-foreground">Porcentaje de asistencia</p>
+            <div className="mt-4 h-2 w-full rounded-full bg-muted">
+              <div className="h-2 rounded-full bg-primary" style={{ width: `${porcentajeAsistencia}%` }} />
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Últimos 30 días</p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Presentes</CardTitle>
+            <CardTitle className="text-sm font-medium">Presente</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{presentes}</div>
-            <p className="text-xs text-muted-foreground">de {totalRegistros} clases</p>
+            <div className="text-2xl font-bold">{presentes}</div>
+            <p className="text-xs text-muted-foreground">Total de asistencias</p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Ausencias</CardTitle>
+            <CardTitle className="text-sm font-medium">Ausente</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{ausentes}</div>
-            <p className="text-xs text-muted-foreground">de {totalRegistros} clases</p>
+            <div className="text-2xl font-bold">{ausentes}</div>
+            <p className="text-xs text-muted-foreground">Total de ausencias</p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Tardanzas</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{tardanzas}</div>
-            <p className="text-xs text-muted-foreground">de {totalRegistros} clases</p>
+            <div className="text-2xl font-bold">{tardanzas}</div>
+            <p className="text-xs text-muted-foreground">Total de tardanzas</p>
           </CardContent>
         </Card>
       </div>
 
-      <Tabs defaultValue="historial" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="historial">Historial de Asistencia</TabsTrigger>
-          <TabsTrigger value="qr">Mi Código QR</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="historial" className="space-y-4">
-          <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4">
-            <div className="relative flex-1">
-              <Input
-                placeholder="Buscar por fecha o curso..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="flex space-x-4">
-              <div className="w-[180px]">
-                <Select value={filtroCurso} onValueChange={setFiltroCurso}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Filtrar por curso" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos los cursos</SelectItem>
-                    {cursos.map((curso) => (
-                      <SelectItem key={curso} value={curso}>
-                        {curso}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="w-[180px]">
-                <Select value={filtroEstado} onValueChange={setFiltroEstado}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Filtrar por estado" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos los estados</SelectItem>
-                    <SelectItem value="Presente">Presente</SelectItem>
-                    <SelectItem value="Ausente">Ausente</SelectItem>
-                    <SelectItem value="Tardanza">Tardanza</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Historial de Asistencia</CardTitle>
-              <CardDescription>Registro detallado de tu asistencia a clases</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="border rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
-                        Fecha
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
-                        Curso
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
-                        Estado
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
-                        Hora
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {registrosFiltrados.map((registro) => (
-                      <tr key={registro.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{registro.fecha}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{registro.curso}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+      <Card>
+        <CardHeader>
+          <CardTitle>Historial de asistencia</CardTitle>
+          <CardDescription>Registro detallado de tu asistencia a clases</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {Object.keys(asistenciasPorMes).length > 0 ? (
+            <div className="space-y-6">
+              {Object.entries(asistenciasPorMes).map(([mes, asistenciasMes]) => (
+                <div key={mes}>
+                  <h3 className="mb-4 font-semibold capitalize">{mes}</h3>
+                  <div className="space-y-2">
+                    {asistenciasMes.map((asistencia) => (
+                      <div key={asistencia.id} className="flex items-center justify-between rounded-lg border p-4">
+                        <div className="flex items-center space-x-4">
+                          {getEstadoIcon(asistencia.estado)}
+                          <div>
+                            <p className="font-medium">{asistencia.grupo?.curso?.nombre || "Curso no disponible"}</p>
+                            <p className="text-sm text-muted-foreground">{formatDate(asistencia.fecha)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center">
                           <span
-                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              registro.estado === "Presente"
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                              asistencia.estado === "presente"
                                 ? "bg-green-100 text-green-800"
-                                : registro.estado === "Ausente"
+                                : asistencia.estado === "ausente"
                                   ? "bg-red-100 text-red-800"
-                                  : "bg-yellow-100 text-yellow-800"
+                                  : asistencia.estado === "tardanza"
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : "bg-blue-100 text-blue-800"
                             }`}
                           >
-                            {registro.estado}
+                            {getEstadoText(asistencia.estado)}
                           </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{registro.hora}</td>
-                      </tr>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="qr" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Mi Código QR Personal</CardTitle>
-              <CardDescription>Utiliza este código para registrar tu asistencia en clases</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center">
-              <div className="bg-white p-6 rounded-lg shadow-md border-2 border-blue-200 w-64 text-center mb-6">
-                <h3 className="font-bold text-lg mb-2">Juan Pérez</h3>
-                <div className="bg-gray-200 w-48 h-48 mx-auto flex items-center justify-center">
-                  <svg viewBox="0 0 100 100" className="w-40 h-40">
-                    <path d="M30,30 L30,45 L45,45 L45,30 Z" fill="#000" />
-                    <path d="M50,30 L50,45 L65,45 L65,30 Z" fill="#000" />
-                    <path d="M70,30 L70,45 L85,45 L85,30 Z" fill="#000" />
-                    <path d="M30,50 L30,65 L45,65 L45,50 Z" fill="#000" />
-                    <path d="M50,50 L50,65 L65,65 L65,50 Z" fill="#000" />
-                    <path d="M70,50 L70,65 L85,65 L85,50 Z" fill="#000" />
-                    <path d="M30,70 L30,85 L45,85 L45,70 Z" fill="#000" />
-                    <path d="M50,70 L50,85 L65,85 L65,70 Z" fill="#000" />
-                    <path d="M70,70 L70,85 L85,85 L85,70 Z" fill="#000" />
-                  </svg>
+                  </div>
                 </div>
-                <p className="text-sm mt-2">ID: ALU-2023-001</p>
-                <p className="text-sm text-muted-foreground">Secundaria - 3° A</p>
-              </div>
-
-              <div className="space-y-4 w-full max-w-md">
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <h4 className="font-medium flex items-center">
-                    <QrCode className="h-4 w-4 mr-2 text-blue-700" />
-                    Instrucciones de uso
-                  </h4>
-                  <ul className="mt-2 space-y-2 text-sm">
-                    <li className="flex items-start">
-                      <span className="bg-blue-200 text-blue-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-2 mt-0.5">
-                        1
-                      </span>
-                      <span>Muestra este código QR al profesor al inicio de cada clase.</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="bg-blue-200 text-blue-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-2 mt-0.5">
-                        2
-                      </span>
-                      <span>El profesor escaneará el código con la aplicación de asistencia.</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="bg-blue-200 text-blue-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-2 mt-0.5">
-                        3
-                      </span>
-                      <span>Tu asistencia quedará registrada automáticamente en el sistema.</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <Button className="w-full">Descargar Código QR</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Calendar className="h-10 w-10 text-muted-foreground" />
+              <h3 className="mt-4 text-lg font-semibold">No hay registros de asistencia</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                No se encontraron registros de asistencia para el filtro seleccionado
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
