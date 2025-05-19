@@ -23,6 +23,16 @@ export default function AlumnoLayout({ children }: { children: React.ReactNode }
     }
   }, [user, loading, router])
 
+  const handleSignOut = async () => {
+    try {
+      await signOut()
+      router.push("/login")
+    } catch (error) {
+      console.error("Error al cerrar sesión:", error)
+      router.push("/login")
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -104,7 +114,7 @@ export default function AlumnoLayout({ children }: { children: React.ReactNode }
             <Button
               variant="outline"
               className="w-full justify-start text-white border-white/20 hover:bg-white/10 hover:text-white"
-              onClick={signOut}
+              onClick={handleSignOut}
             >
               <LogOut className="mr-2 h-4 w-4" />
               Cerrar sesión
