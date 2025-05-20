@@ -1,5 +1,6 @@
 import { supabase } from "./supabase"
 import type { Usuario, Grado, Seccion, Curso, Grupo, RegistroToken, Horario } from "./supabase"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 // Usuarios
 export async function getUsuarios(filtro?: { rol?: string; activo?: boolean; busqueda?: string }) {
@@ -617,4 +618,43 @@ export async function getCursosProfesor(auth_id: string) {
     console.error("Error fetching cursos del profesor:", error);
     throw error;
   }
+}
+
+// Funciones para manejar endpoints externos
+export async function getTemplateList(type: 'site_integration' | 'writing') {
+  try {
+    const supabase = createClientComponentClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      throw new Error('No hay sesión activa')
+    }
+
+    const response = await fetch(`/${type}/template_list`, {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || 'Error al obtener la lista de plantillas')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error(`Error fetching ${type} template list:`, error)
+    throw error
+  }
+}
+
+// Función para manejar errores de permisos
+export function handlePermissionError(error: any) {
+  if (error.code === 403) {
+    // Redirigir a una página de error de permisos o mostrar un mensaje
+    window.location.href = '/error?type=permission'
+    return
+  }
+  throw error
 }

@@ -38,6 +38,39 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
+  // Handle external API endpoints
+  if (request.nextUrl.pathname.startsWith('/site_integration') || request.nextUrl.pathname.startsWith('/writing')) {
+    if (!session) {
+      return new NextResponse(
+        JSON.stringify({ error: 'No autorizado', code: 401 }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Verificar permisos específicos para estos endpoints
+    const { data: userData } = await supabase
+      .from('usuarios')
+      .select('rol, activo')
+      .eq('id', session.user.id)
+      .single()
+
+    if (!userData || !userData.activo) {
+      return new NextResponse(
+        JSON.stringify({ error: 'Usuario inactivo o no encontrado', code: 403 }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Permitir acceso solo a roles específicos
+    const allowedRoles = ['admin', 'profesor']
+    if (!allowedRoles.includes(userData.rol)) {
+      return new NextResponse(
+        JSON.stringify({ error: 'No tiene permisos para acceder a este recurso', code: 403 }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+  }
+
   return res
 }
 
