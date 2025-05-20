@@ -1,12 +1,13 @@
 "use client"
 
+import { Suspense } from "react"
 import { useEffect } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertCircle, ArrowLeft } from "lucide-react"
 
-export default function ErrorPage() {
+function ErrorPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const errorType = searchParams.get("type")
@@ -55,5 +56,24 @@ export default function ErrorPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function ErrorPage() {
+  return (
+    <Suspense fallback={
+      <div className="container mx-auto flex items-center justify-center min-h-screen p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <AlertCircle className="h-6 w-6 text-red-500" />
+              <CardTitle>Cargando...</CardTitle>
+            </div>
+          </CardHeader>
+        </Card>
+      </div>
+    }>
+      <ErrorPageContent />
+    </Suspense>
   )
 } 

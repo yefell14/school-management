@@ -2,18 +2,31 @@
 
 import { useEffect, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
-import { supabase, type Asistencia, type Grupo } from "@/lib/supabase"
+import { supabase, type Asistencia, type Grupo, type Curso } from "@/lib/supabase"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Calendar, CheckCircle2, XCircle, Clock, QrCode } from "lucide-react"
-import { QRScanner } from "@/components/qr-scanner"
+import { QrScanner } from "@/components/qr-scanner"
+
+type GrupoWithCurso = Omit<Grupo, 'curso'> & { curso: Pick<Curso, 'nombre'> }
+
+type GrupoAlumnoResponse = {
+  grupo_id: string
+  grupo: {
+    id: string
+    curso: {
+      id: string
+      nombre: string
+    }
+  }
+}
 
 export default function AsistenciaPage() {
   const { user } = useAuth()
   const [asistencias, setAsistencias] = useState<Asistencia[]>([])
-  const [cursos, setCursos] = useState<(Grupo & { curso: { nombre: string } })[]>([])
+  const [cursos, setCursos] = useState<GrupoWithCurso[]>([])
   const [selectedCurso, setSelectedCurso] = useState<string>("all")
   const [loading, setLoading] = useState(true)
   const [qrScannerOpen, setQrScannerOpen] = useState(false)
@@ -37,10 +50,10 @@ export default function AsistenciaPage() {
 
         if (gruposError) throw gruposError
 
-        const gruposFormatted = gruposData.map((item) => ({
+        const gruposFormatted: GrupoWithCurso[] = (gruposData as unknown as GrupoAlumnoResponse[]).map((item) => ({
           id: item.grupo.id,
           curso_id: item.grupo.curso.id,
-          curso: item.grupo.curso,
+          curso: { nombre: item.grupo.curso.nombre },
           grado_id: "",
           seccion_id: "",
           año_escolar: "",
@@ -207,7 +220,7 @@ export default function AsistenciaPage() {
               Escanea el código QR proporcionado por tu profesor para registrar tu asistencia
             </DialogDescription>
           </DialogHeader>
-          {user && <QRScanner userId={user.id} onSuccess={handleQRSuccess} onClose={() => setQrScannerOpen(false)} />}
+          {user && <QrScanner onScan={handleQRSuccess} />}
         </DialogContent>
       </Dialog>
 
