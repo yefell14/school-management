@@ -44,6 +44,13 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/writing') ||
     request.nextUrl.pathname.startsWith('/dashboard/alumno')
   ) {
+    // Para endpoints externos (/writing y /site_integration), permitir acceso sin sesión
+    if (request.nextUrl.pathname.startsWith('/writing') || request.nextUrl.pathname.startsWith('/site_integration')) {
+      // Permitir acceso a estos endpoints sin verificación de sesión
+      return res
+    }
+
+    // Para rutas de dashboard/alumno, mantener la verificación de sesión
     if (!session) {
       return new NextResponse(
         JSON.stringify({ error: 'No autorizado', code: 401 }),
@@ -51,7 +58,7 @@ export async function middleware(request: NextRequest) {
       )
     }
 
-    // Verificar permisos específicos para estos endpoints
+    // Verificar permisos específicos para rutas de dashboard
     const { data: userData } = await supabase
       .from('usuarios')
       .select('rol, activo')
@@ -73,7 +80,6 @@ export async function middleware(request: NextRequest) {
       )
     }
 
-    // Para endpoints externos, permitir acceso a todos los roles activos
     return res
   }
 
