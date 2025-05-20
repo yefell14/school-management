@@ -161,9 +161,64 @@ export default function AsistenciaPage() {
     }
   }
 
-  const handleQRSuccess = (data: string) => {
-    console.log("QR Code scanned:", data)
-    // The QRScanner component will handle the attendance registration
+  const handleQRSuccess = async (data: string) => {
+    try {
+      // Parse the QR data
+      const qrData = JSON.parse(data)
+      
+      // Verify the QR data is valid
+      if (!qrData.grupo_id || !qrData.timestamp) {
+        throw new Error('Código QR inválido')
+      }
+
+      // Check if the QR code is still valid (within 5 minutes)
+      const qrTimestamp = new Date(qrData.timestamp).getTime()
+      const now = new Date().getTime()
+      if (now - qrTimestamp > 5 * 60 * 1000) {
+        throw new Error('El código QR ha expirado')
+      }
+
+      // Register attendance
+      const { error } = await supabase
+        .from('asistencias')
+        .insert([
+          {
+            estudiante_id: user?.id,
+            grupo_id: qrData.grupo_id,
+            fecha: new Date().toISOString(),
+            estado: 'presente'
+          }
+        ])
+
+      if (error) {
+        if (error.code === '23505') { // Unique violation
+          throw new Error('Ya has registrado tu asistencia para esta clase')
+        }
+        throw error
+      }
+
+      // Close the QR scanner and refresh data
+      setQrScannerOpen(false)
+      // Refresh attendance data
+      const { data: asistenciasData, error: asistenciasError } = await supabase
+        .from("asistencias")
+        .select(`
+          *,
+          grupo:grupo_id(
+            curso:cursos(nombre)
+          )
+        `)
+        .eq("estudiante_id", user?.id)
+        .order("fecha", { ascending: false })
+
+      if (asistenciasError) throw asistenciasError
+      setAsistencias(asistenciasData)
+
+    } catch (error: any) {
+      console.error('Error al registrar asistencia:', error)
+      // Show error to user
+      alert(error.message || 'Error al registrar asistencia')
+    }
   }
 
   return (

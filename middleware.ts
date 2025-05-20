@@ -61,14 +61,9 @@ export async function middleware(request: NextRequest) {
       )
     }
 
-    // Permitir acceso solo a roles específicos
-    const allowedRoles = ['admin', 'profesor']
-    if (!allowedRoles.includes(userData.rol)) {
-      return new NextResponse(
-        JSON.stringify({ error: 'No tiene permisos para acceder a este recurso', code: 403 }),
-        { status: 403, headers: { 'Content-Type': 'application/json' } }
-      )
-    }
+    // Permitir acceso a todos los roles activos
+    // Los permisos específicos se manejarán en el backend
+    return res
   }
 
   return res
