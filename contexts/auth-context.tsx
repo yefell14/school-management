@@ -8,6 +8,7 @@ interface User {
   apellidos: string
   email: string
   id: string
+  rol: "admin" | "profesor" | "alumno" | "auxiliar"
 }
 
 interface AuthContextType {
@@ -33,19 +34,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (session?.user) {
           // Get user profile data
-          const { data: profile, error: profileError } = await supabase
-            .from('perfiles')
+          const { data: userData, error: userError } = await supabase
+            .from('usuarios')
             .select('*')
             .eq('id', session.user.id)
             .single()
 
-          if (profileError) throw profileError
+          if (userError) {
+            console.error("Error fetching user data:", userError)
+            return
+          }
+
+          if (!userData) {
+            console.error("No user data found")
+            return
+          }
 
           setUser({
             id: session.user.id,
             email: session.user.email!,
-            nombre: profile.nombre,
-            apellidos: profile.apellidos
+            nombre: userData.nombre,
+            apellidos: userData.apellidos,
+            rol: userData.rol
           })
         }
       } catch (error) {
@@ -61,22 +71,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Subscribe to auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        const { data: profile, error: profileError } = await supabase
-          .from('perfiles')
+        const { data: userData, error: userError } = await supabase
+          .from('usuarios')
           .select('*')
           .eq('id', session.user.id)
           .single()
 
-        if (profileError) {
-          console.error("Error fetching profile:", profileError)
+        if (userError) {
+          console.error("Error fetching user data:", userError)
+          return
+        }
+
+        if (!userData) {
+          console.error("No user data found")
           return
         }
 
         setUser({
           id: session.user.id,
           email: session.user.email!,
-          nombre: profile.nombre,
-          apellidos: profile.apellidos
+          nombre: userData.nombre,
+          apellidos: userData.apellidos,
+          rol: userData.rol
         })
       } else if (event === 'SIGNED_OUT') {
         setUser(null)

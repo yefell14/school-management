@@ -91,3 +91,17 @@ export type GrupoAlumno = {
   fecha_asignacion: string
   alumno?: Usuario
 }
+
+export type Asistencia = {
+  id: number
+  estudiante_id: string
+  grupo_id: string
+  fecha: string
+  estado: "presente" | "ausente" | "tardanza" | "justificado"
+  observaciones?: string
+  grupo?: {
+    curso: {
+      nombre: string
+    }
+  }
+}

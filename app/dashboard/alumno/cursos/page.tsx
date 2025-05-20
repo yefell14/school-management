@@ -40,15 +40,7 @@ export default function CursosPage() {
           `)
           .eq("alumno_id", user.id)
 
-        if (gruposError) {
-          console.error("Error fetching student groups:", gruposError)
-          throw gruposError
-        }
-
-        if (!gruposData) {
-          console.error("No data returned from grupos query")
-          return
-        }
+        if (gruposError) throw gruposError
 
         const gruposFormatted = gruposData.map((item) => ({
           id: item.grupo.id,
@@ -65,8 +57,6 @@ export default function CursosPage() {
         setCursos(gruposFormatted)
       } catch (error) {
         console.error("Error fetching courses:", error)
-        // Show error to user
-        setCursos([])
       } finally {
         setLoading(false)
       }

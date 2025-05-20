@@ -23,16 +23,6 @@ export default function AlumnoLayout({ children }: { children: React.ReactNode }
     }
   }, [user, loading, router])
 
-  const handleSignOut = async () => {
-    try {
-      await signOut()
-      router.push("/login")
-    } catch (error) {
-      console.error("Error al cerrar sesión:", error)
-      router.push("/login")
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -46,13 +36,13 @@ export default function AlumnoLayout({ children }: { children: React.ReactNode }
   }
 
   const navigation = [
-    { name: "Mis Cursos", href: "/dashboard/alumno/cursos", icon: BookOpen },
-    { name: "Horario", href: "/dashboard/alumno/horario", icon: Calendar },
-    { name: "Mensajes", href: "/dashboard/alumno/mensajes", icon: MessageSquare },
-    { name: "Asistencia", href: "/dashboard/alumno/asistencia", icon: CheckSquare },
-    { name: "Tareas", href: "/dashboard/alumno/tareas", icon: FileText },
-    { name: "Mi Perfil", href: "/dashboard/alumno/perfil", icon: User },
-    { name: "Configuración", href: "/dashboard/alumno/configuracion", icon: Settings },
+    { name: "Mis Cursos", href: "/alumno/cursos", icon: BookOpen },
+    { name: "Horario", href: "/alumno/horario", icon: Calendar },
+    { name: "Mensajes", href: "/alumno/mensajes", icon: MessageSquare },
+    { name: "Asistencia", href: "/alumno/asistencia", icon: CheckSquare },
+    { name: "Tareas", href: "/alumno/tareas", icon: FileText },
+    { name: "Mi Perfil", href: "/alumno/perfil", icon: User },
+    { name: "Configuración", href: "/alumno/configuracion", icon: Settings },
   ]
 
   const toggleMobileMenu = () => {
@@ -114,7 +104,7 @@ export default function AlumnoLayout({ children }: { children: React.ReactNode }
             <Button
               variant="outline"
               className="w-full justify-start text-white border-white/20 hover:bg-white/10 hover:text-white"
-              onClick={handleSignOut}
+              onClick={signOut}
             >
               <LogOut className="mr-2 h-4 w-4" />
               Cerrar sesión

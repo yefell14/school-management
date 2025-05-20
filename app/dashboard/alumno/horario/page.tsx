@@ -6,30 +6,9 @@ import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar } from "lucide-react"
 
-interface Horario {
-  id: string
-  dia: string
-  hora_inicio: string
-  hora_fin: string
-  aula?: string
-  grupo: {
-    id: string
-    curso: {
-      id: string
-      nombre: string
-    }
-    grado: {
-      nombre: string
-    }
-    seccion: {
-      nombre: string
-    }
-  }
-}
-
 export default function HorarioPage() {
   const { user } = useAuth()
-  const [horarios, setHorarios] = useState<Horario[]>([])
+  const [horarios, setHorarios] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -43,15 +22,7 @@ export default function HorarioPage() {
           .select("grupo_id")
           .eq("alumno_id", user.id)
 
-        if (gruposError) {
-          console.error("Error fetching student groups:", gruposError)
-          throw gruposError
-        }
-
-        if (!gruposData) {
-          console.error("No data returned from grupos query")
-          return
-        }
+        if (gruposError) throw gruposError
 
         const grupoIds = gruposData.map((item) => item.grupo_id)
 
@@ -72,25 +43,11 @@ export default function HorarioPage() {
             .order("dia", { ascending: true })
             .order("hora_inicio", { ascending: true })
 
-          if (horariosError) {
-            console.error("Error fetching schedules:", horariosError)
-            throw horariosError
-          }
-
-          if (!horariosData) {
-            console.error("No data returned from horarios query")
-            return
-          }
-
+          if (horariosError) throw horariosError
           setHorarios(horariosData)
-        } else {
-          console.log("No groups found for student")
-          setHorarios([])
         }
       } catch (error) {
         console.error("Error fetching schedules:", error)
-        // Show error to user
-        setHorarios([])
       } finally {
         setLoading(false)
       }
@@ -130,7 +87,7 @@ export default function HorarioPage() {
       acc[horario.dia].push(horario)
       return acc
     },
-    {} as Record<string, Horario[]>,
+    {} as Record<string, any[]>,
   )
 
   return (
