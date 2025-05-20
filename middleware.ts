@@ -38,8 +38,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Handle external API endpoints
-  if (request.nextUrl.pathname.startsWith('/site_integration') || request.nextUrl.pathname.startsWith('/writing')) {
+  // Handle external API endpoints and student routes
+  if (
+    request.nextUrl.pathname.startsWith('/site_integration') || 
+    request.nextUrl.pathname.startsWith('/writing') ||
+    request.nextUrl.pathname.startsWith('/dashboard/alumno')
+  ) {
     if (!session) {
       return new NextResponse(
         JSON.stringify({ error: 'No autorizado', code: 401 }),
@@ -61,8 +65,15 @@ export async function middleware(request: NextRequest) {
       )
     }
 
-    // Permitir acceso a todos los roles activos
-    // Los permisos específicos se manejarán en el backend
+    // Para rutas de alumnos, verificar que el usuario sea alumno
+    if (request.nextUrl.pathname.startsWith('/dashboard/alumno') && userData.rol !== 'alumno') {
+      return new NextResponse(
+        JSON.stringify({ error: 'No tiene permisos para acceder a esta sección', code: 403 }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Para endpoints externos, permitir acceso a todos los roles activos
     return res
   }
 

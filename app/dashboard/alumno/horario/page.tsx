@@ -4,18 +4,61 @@ import { useEffect, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar } from "lucide-react"
+import { Calendar, AlertCircle } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { useRouter } from "next/navigation"
+
+type Horario = {
+  id: number
+  grupo_id: string
+  dia: string
+  hora_inicio: string
+  hora_fin: string
+  aula?: string
+  grupo: {
+    id: string
+    curso: {
+      id: string
+      nombre: string
+    }
+    grado: {
+      nombre: string
+    }
+    seccion: {
+      nombre: string
+    }
+  }
+}
 
 export default function HorarioPage() {
   const { user } = useAuth()
-  const [horarios, setHorarios] = useState<any[]>([])
+  const router = useRouter()
+  const [horarios, setHorarios] = useState<Horario[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchHorarios = async () => {
-      if (!user) return
+      if (!user) {
+        router.push('/login')
+        return
+      }
 
       try {
+        // Verificar que el usuario sea alumno
+        const { data: userData, error: userError } = await supabase
+          .from('usuarios')
+          .select('rol')
+          .eq('id', user.id)
+          .single()
+
+        if (userError) throw userError
+
+        if (userData.rol !== 'alumno') {
+          setError('No tienes permisos para acceder a esta sección')
+          return
+        }
+
         // Get student's groups
         const { data: gruposData, error: gruposError } = await supabase
           .from("grupo_alumno")
@@ -46,20 +89,37 @@ export default function HorarioPage() {
           if (horariosError) throw horariosError
           setHorarios(horariosData)
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching schedules:", error)
+        setError(error.message || 'Error al cargar el horario')
       } finally {
         setLoading(false)
       }
     }
 
     fetchHorarios()
-  }, [user])
+  }, [user, router])
 
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col space-y-2">
+          <h1 className="text-3xl font-bold tracking-tight">Mi Horario</h1>
+          <p className="text-muted-foreground">Consulta tu horario semanal de clases</p>
+        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       </div>
     )
   }
@@ -87,7 +147,7 @@ export default function HorarioPage() {
       acc[horario.dia].push(horario)
       return acc
     },
-    {} as Record<string, any[]>,
+    {} as Record<string, Horario[]>,
   )
 
   return (
