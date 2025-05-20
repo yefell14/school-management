@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react"
+import { supabase } from "@/lib/supabase"
 
 interface User {
   nombre: string
@@ -19,38 +20,82 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>({
-    nombre: "Juan",
-    apellidos: "Pérez",
-    email: "juan.perez@example.com",
-    id: "1"
-  })
-  const [loading, setLoading] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check if user is logged in (e.g., check localStorage or session)
+    // Check if user is logged in
     const checkAuth = async () => {
       try {
-        // TODO: Implement your actual auth check logic here
-        setLoading(false)
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) throw error
+
+        if (session?.user) {
+          // Get user profile data
+          const { data: profile, error: profileError } = await supabase
+            .from('perfiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+
+          if (profileError) throw profileError
+
+          setUser({
+            id: session.user.id,
+            email: session.user.email!,
+            nombre: profile.nombre,
+            apellidos: profile.apellidos
+          })
+        }
       } catch (error) {
         console.error("Auth check failed:", error)
+        setUser(null)
+      } finally {
         setLoading(false)
       }
     }
 
     checkAuth()
+
+    // Subscribe to auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const { data: profile, error: profileError } = await supabase
+          .from('perfiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+
+        if (profileError) {
+          console.error("Error fetching profile:", profileError)
+          return
+        }
+
+        setUser({
+          id: session.user.id,
+          email: session.user.email!,
+          nombre: profile.nombre,
+          apellidos: profile.apellidos
+        })
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null)
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [])
 
   const signIn = async (email: string, password: string) => {
     try {
-      // TODO: Implement your actual sign in logic here
-      setUser({
-        nombre: "Juan",
-        apellidos: "Pérez",
-        email: email,
-        id: "1"
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password
       })
+
+      if (error) throw error
     } catch (error) {
       console.error("Sign in failed:", error)
       throw error
@@ -59,7 +104,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     try {
-      // TODO: Implement your actual sign out logic here
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
       setUser(null)
     } catch (error) {
       console.error("Sign out failed:", error)
