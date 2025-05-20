@@ -36,13 +36,13 @@ export default function AlumnoLayout({ children }: { children: React.ReactNode }
   }
 
   const navigation = [
-    { name: "Mis Cursos", href: "/alumno/cursos", icon: BookOpen },
-    { name: "Horario", href: "/alumno/horario", icon: Calendar },
-    { name: "Mensajes", href: "/alumno/mensajes", icon: MessageSquare },
-    { name: "Asistencia", href: "/alumno/asistencia", icon: CheckSquare },
-    { name: "Tareas", href: "/alumno/tareas", icon: FileText },
-    { name: "Mi Perfil", href: "/alumno/perfil", icon: User },
-    { name: "Configuración", href: "/alumno/configuracion", icon: Settings },
+    { name: "Mis Cursos", href: "/dashboard/alumno/cursos", icon: BookOpen },
+    { name: "Horario", href: "/dashboard/alumno/horario", icon: Calendar },
+    { name: "Mensajes", href: "/dashboard/alumno/mensajes", icon: MessageSquare },
+    { name: "Asistencia", href: "/dashboard/alumno/asistencia", icon: CheckSquare },
+    { name: "Tareas", href: "/dashboard/alumno/tareas", icon: FileText },
+    { name: "Mi Perfil", href: "/dashboard/alumno/perfil", icon: User },
+    { name: "Configuración", href: "/dashboard/alumno/configuracion", icon: Settings },
   ]
 
   const toggleMobileMenu = () => {
