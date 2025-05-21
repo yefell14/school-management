@@ -227,7 +227,7 @@ export default function AlumnoDashboard() {
                             {tarea.grupo.curso.nombre} | Entrega: {formatDate(tarea.fecha_entrega)}
                           </p>
                         </div>
-                        <Link href={`/alumno/tareas/${tarea.id}`}>
+                        <Link href={`/dashboard/alumno/tareas/${tarea.id}`}>
                           <Button variant="ghost" size="sm">
                             Ver
                           </Button>
@@ -255,7 +255,7 @@ export default function AlumnoDashboard() {
                 </CardHeader>
                 <CardContent className="p-6">
                   <div className="mt-2 flex justify-end">
-                    <Link href={`/alumno/cursos/${curso.id}`}>
+                    <Link href={`/dashboard/alumno/cursos/${curso.id}`}>
                       <Button>Ver detalles</Button>
                     </Link>
                   </div>
@@ -282,7 +282,7 @@ export default function AlumnoDashboard() {
                           {tarea.grupo.curso.nombre} | Entrega: {formatDate(tarea.fecha_entrega)}
                         </p>
                       </div>
-                      <Link href={`/alumno/tareas/${tarea.id}`}>
+                      <Link href={`/dashboard/alumno/tareas/${tarea.id}`}>
                         <Button variant="outline" size="sm">
                           Ver tarea
                         </Button>

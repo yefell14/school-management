@@ -117,7 +117,7 @@ export default function CursosPage() {
                 </div>
               </CardContent>
               <CardFooter className="bg-muted/50 p-4">
-                <Link href={`/alumno/cursos/${curso.id}`} className="w-full">
+                <Link href={`/dashboard/alumno/cursos/${curso.id}`} className="w-full">
                   <Button className="w-full">Ver detalles</Button>
                 </Link>
               </CardFooter>

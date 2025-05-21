@@ -298,7 +298,7 @@ export default function CursoDetailPage({ params }: { params: { id: string } }) 
                           </span>
                         </div>
                       </div>
-                      <Link href={`/alumno/tareas/${tarea.id}`}>
+                      <Link href={`/dashboard/alumno/tareas/${tarea.id}`}>
                         <Button variant="outline" size="sm">
                           Ver tarea
                         </Button>
