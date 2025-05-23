@@ -1,150 +1,255 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Button } from "@/components/ui/button"
+import { QrScanner } from "@/components/dashboard/qr-scanner"
+import { QrGenerator } from "@/components/dashboard/qr-generator"
+import { toast } from "@/components/ui/use-toast"
+import { supabase } from "@/lib/supabase"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { QrCode, Search, UserX, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
+import type { Usuario } from "@/lib/supabase"
 
 export default function AsistenciaPage() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedTab, setSelectedTab] = useState("qr")
-  const [selectedUserType, setSelectedUserType] = useState("alumno")
-  const [selectedEstado, setSelectedEstado] = useState("presente")
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [selectedUser, setSelectedUser] = useState(null)
-  const [isRegistering, setIsRegistering] = useState(false)
-  const [isSuccess, setIsSuccess] = useState(false)
+  const [activeTab, setActiveTab] = useState("escanear")
+  const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [selectedUsuario, setSelectedUsuario] = useState("")
+  const [selectedRol, setSelectedRol] = useState<"alumno" | "profesor">("alumno")
+  const [observacion, setObservacion] = useState("")
+  const [loading, setLoading] = useState(false)
 
-  // Datos de ejemplo para usuarios
-  const usuarios = [
-    { id: 1, nombre: "Juan", apellidos: "Pérez García", dni: "12345678", rol: "alumno", grado: "3°", seccion: "A" },
-    { id: 2, nombre: "María", apellidos: "López Rodríguez", dni: "23456789", rol: "alumno", grado: "3°", seccion: "A" },
-    { id: 3, nombre: "Carlos", apellidos: "Gómez Sánchez", dni: "34567890", rol: "alumno", grado: "3°", seccion: "B" },
-    { id: 4, nombre: "Ana", apellidos: "Martínez Flores", dni: "45678901", rol: "alumno", grado: "4°", seccion: "A" },
-    {
-      id: 5,
-      nombre: "Pedro",
-      apellidos: "Sánchez Torres",
-      dni: "56789012",
-      rol: "profesor",
-      especialidad: "Matemáticas",
-    },
-    { id: 6, nombre: "Laura", apellidos: "Ramírez Vargas", dni: "67890123", rol: "profesor", especialidad: "Historia" },
-  ]
+  useEffect(() => {
+    const fetchUsuarios = async () => {
+      const { data, error } = await supabase
+        .from("usuarios")
+        .select("*")
+        .in("rol", ["alumno", "profesor"])
+        .eq("activo", true)
+        .order("apellidos", { ascending: true })
 
-  // Filtrar usuarios según el término de búsqueda y el tipo seleccionado
-  const filteredUsers = usuarios.filter(
-    (user) =>
-      user.rol === selectedUserType &&
-      (user.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.apellidos.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.dni.includes(searchTerm)),
-  )
+      if (error) {
+        console.error("Error al cargar usuarios:", error)
+        return
+      }
+      setUsuarios(data || [])
+    }
 
-  // Función para manejar la selección de usuario
-  const handleSelectUser = (user) => {
-    setSelectedUser(user)
-    setIsDialogOpen(true)
+    fetchUsuarios()
+  }, [])
+
+  const handleQrScanned = async (data: string) => {
+    setLoading(true)
+    try {
+      // Verificamos si es un QR válido
+      if (!data.includes("-")) {
+        throw new Error("Código QR inválido")
+      }
+
+      const [tipo, id] = data.split("-")
+
+      if (tipo === "curso") {
+        // Verificamos si el QR existe y está activo
+        const { data: qrData, error: qrError } = await supabase
+          .from("qr_asistencias_curso")
+          .select("*, curso:cursos(*)")
+          .eq("qr_codigo", data)
+          .eq("activo", true)
+          .single()
+
+        if (qrError || !qrData) {
+          throw new Error("Código QR no válido o expirado")
+        }
+
+        // Verificamos si el QR no ha expirado
+        if (qrData.fecha_expiracion && new Date(qrData.fecha_expiracion) < new Date()) {
+          // Actualizamos el QR a inactivo
+          await supabase.from("qr_asistencias_curso").update({ activo: false }).eq("id", qrData.id)
+
+          throw new Error("Código QR expirado")
+        }
+
+        toast({
+          title: "QR válido",
+          description: `Curso: ${qrData.curso?.nombre}. Seleccione un usuario para registrar asistencia.`,
+        })
+
+        // Cambiamos a la pestaña de registro manual
+        setActiveTab("manual")
+      } else if (tipo === "usuario") {
+        // Verificamos si el usuario existe
+        const { data: usuario, error: userError } = await supabase.from("usuarios").select("*").eq("id", id).single()
+
+        if (userError || !usuario) {
+          throw new Error("Usuario no encontrado")
+        }
+
+        // Registramos la asistencia
+        await registrarAsistencia(usuario.id, usuario.rol as "alumno" | "profesor")
+
+        toast({
+          title: "Asistencia registrada",
+          description: `Se ha registrado la asistencia de ${usuario.nombre} ${usuario.apellidos}`,
+        })
+      } else {
+        throw new Error("Tipo de QR no reconocido")
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error al procesar QR",
+        description: error.message || "Ha ocurrido un error al procesar el código QR",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
-  // Función para registrar asistencia
-  const handleRegisterAttendance = () => {
-    setIsRegistering(true)
+  const registrarAsistencia = async (usuarioId: string, rol: "alumno" | "profesor") => {
+    try {
+      // Obtenemos el usuario actual (auxiliar)
+      const usuarioActual = JSON.parse(localStorage.getItem("usuario") || "{}")
+      if (!usuarioActual.id) {
+        throw new Error("No se pudo identificar al usuario actual")
+      }
 
-    // Simulamos una petición a la API
-    setTimeout(() => {
-      setIsRegistering(false)
-      setIsSuccess(true)
+      // Verificamos si ya existe una asistencia para hoy
+      const fechaHoy = new Date().toISOString().split("T")[0]
+      const { data: asistenciaExistente, error: checkError } = await supabase
+        .from("asistencias_general")
+        .select("*")
+        .eq("usuario_id", usuarioId)
+        .eq("fecha", fechaHoy)
+        .maybeSingle()
 
-      // Cerramos el diálogo después de mostrar el éxito
-      setTimeout(() => {
-        setIsSuccess(false)
-        setIsDialogOpen(false)
-        setSelectedUser(null)
-      }, 2000)
-    }, 1500)
+      if (checkError) {
+        throw checkError
+      }
+
+      if (asistenciaExistente) {
+        // Actualizamos la hora de salida
+        const { error: updateError } = await supabase
+          .from("asistencias_general")
+          .update({
+            hora_salida: new Date().toLocaleTimeString(),
+            observacion: observacion || asistenciaExistente.observacion,
+          })
+          .eq("id", asistenciaExistente.id)
+
+        if (updateError) {
+          throw updateError
+        }
+
+        toast({
+          title: "Salida registrada",
+          description: "Se ha registrado la hora de salida correctamente",
+        })
+      } else {
+        // Registramos una nueva asistencia
+        const { error: insertError } = await supabase.from("asistencias_general").insert({
+          usuario_id: usuarioId,
+          rol,
+          fecha: fechaHoy,
+          estado: "presente",
+          hora_entrada: new Date().toLocaleTimeString(),
+          observacion,
+          registrado_por: usuarioActual.id,
+        })
+
+        if (insertError) {
+          throw insertError
+        }
+
+        // Registramos la actividad del auxiliar
+        await supabase.from("actividades_auxiliar").insert({
+          auxiliar_id: usuarioActual.id,
+          accion: "Registro de asistencia",
+          detalles: `Registró la asistencia de un ${rol}`,
+          tipo: "asistencia",
+        })
+
+        toast({
+          title: "Asistencia registrada",
+          description: "Se ha registrado la asistencia correctamente",
+        })
+      }
+
+      // Limpiamos los campos
+      setSelectedUsuario("")
+      setObservacion("")
+    } catch (error: any) {
+      console.error("Error al registrar asistencia:", error)
+      throw new Error(error.message || "Error al registrar la asistencia")
+    }
   }
 
-  // Obtener las iniciales para el avatar
-  const getInitials = (nombre, apellidos) => {
-    return `${nombre.charAt(0)}${apellidos.charAt(0)}`
+  const handleRegistroManual = async () => {
+    setLoading(true)
+    try {
+      if (!selectedUsuario) {
+        throw new Error("Debe seleccionar un usuario")
+      }
+
+      const usuario = usuarios.find((u) => u.id === selectedUsuario)
+      if (!usuario) {
+        throw new Error("Usuario no encontrado")
+      }
+
+      await registrarAsistencia(usuario.id, selectedRol)
+    } catch (error: any) {
+      toast({
+        title: "Error al registrar asistencia",
+        description: error.message || "Ha ocurrido un error al registrar la asistencia",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Registro de Asistencia</h1>
-        <p className="text-muted-foreground">Registra la asistencia diaria de alumnos y profesores</p>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-bold tracking-tight">Registro de Asistencia</h2>
       </div>
 
-      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="qr">Escaneo QR</TabsTrigger>
+          <TabsTrigger value="escanear">Escanear QR</TabsTrigger>
+          <TabsTrigger value="generar">Generar QR</TabsTrigger>
           <TabsTrigger value="manual">Registro Manual</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="qr" className="space-y-4">
+        <TabsContent value="escanear" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Escanear Código QR</CardTitle>
-              <CardDescription>Escanea el código QR del alumno o profesor para registrar su asistencia</CardDescription>
+              <CardDescription>
+                Escanea el código QR del estudiante o profesor para registrar su asistencia
+              </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col items-center space-y-6">
-              <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg p-8 w-full max-w-md flex flex-col items-center justify-center">
-                <QrCode className="h-16 w-16 text-gray-400 mb-4" />
-                <p className="text-center text-muted-foreground">
-                  Posiciona el código QR frente a la cámara para escanear
-                </p>
-              </div>
-
-              <div className="w-full max-w-md">
-                <Button className="w-full">Activar Cámara</Button>
-              </div>
+            <CardContent className="flex justify-center">
+              <QrScanner onScan={handleQrScanned} />
             </CardContent>
-            <CardFooter className="flex flex-col space-y-4">
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 w-full">
-                <h4 className="font-medium flex items-center text-blue-700">
-                  <QrCode className="h-4 w-4 mr-2" />
-                  Instrucciones
-                </h4>
-                <ul className="mt-2 space-y-2 text-sm text-blue-700">
-                  <li className="flex items-start">
-                    <span className="bg-blue-200 text-blue-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-2 mt-0.5">
-                      1
-                    </span>
-                    <span>Haz clic en "Activar Cámara" para iniciar el escaneo.</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="bg-blue-200 text-blue-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-2 mt-0.5">
-                      2
-                    </span>
-                    <span>Posiciona el código QR del alumno o profesor frente a la cámara.</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="bg-blue-200 text-blue-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-2 mt-0.5">
-                      3
-                    </span>
-                    <span>La asistencia se registrará automáticamente al detectar el código.</span>
-                  </li>
-                </ul>
-              </div>
+            <CardFooter className="flex justify-between">
+              <Button variant="outline" onClick={() => setActiveTab("manual")}>
+                Registro Manual
+              </Button>
             </CardFooter>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="generar" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Generar Código QR</CardTitle>
+              <CardDescription>Genera un código QR para un curso o evento específico</CardDescription>
+            </CardHeader>
+            <CardContent className="flex justify-center">
+              <QrGenerator />
+            </CardContent>
           </Card>
         </TabsContent>
 
@@ -152,222 +257,63 @@ export default function AsistenciaPage() {
           <Card>
             <CardHeader>
               <CardTitle>Registro Manual de Asistencia</CardTitle>
-              <CardDescription>
-                Busca y selecciona manualmente a los alumnos o profesores para registrar su asistencia
-              </CardDescription>
+              <CardDescription>Registra la asistencia manualmente seleccionando el usuario</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4">
-                <div className="flex-1">
-                  <RadioGroup
-                    defaultValue="alumno"
-                    className="flex space-x-4"
-                    value={selectedUserType}
-                    onValueChange={setSelectedUserType}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="alumno" id="alumno" />
-                      <Label htmlFor="alumno">Alumnos</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="profesor" id="profesor" />
-                      <Label htmlFor="profesor">Profesores</Label>
-                    </div>
-                  </RadioGroup>
+            <CardContent>
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="rol">Rol</Label>
+                  <Select value={selectedRol} onValueChange={(value: "alumno" | "profesor") => setSelectedRol(value)}>
+                    <SelectTrigger id="rol">
+                      <SelectValue placeholder="Seleccionar rol" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="alumno">Alumno</SelectItem>
+                      <SelectItem value="profesor">Profesor</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="relative flex-1">
+
+                <div className="grid gap-2">
+                  <Label htmlFor="usuario">Usuario</Label>
+                  <Select value={selectedUsuario} onValueChange={setSelectedUsuario}>
+                    <SelectTrigger id="usuario">
+                      <SelectValue placeholder="Seleccionar usuario" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {usuarios
+                        .filter((u) => u.rol === selectedRol)
+                        .map((usuario) => (
+                          <SelectItem key={usuario.id} value={usuario.id}>
+                            {usuario.apellidos}, {usuario.nombre}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="observacion">Observación (opcional)</Label>
                   <Input
-                    placeholder="Buscar por nombre o DNI..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
+                    id="observacion"
+                    value={observacion}
+                    onChange={(e) => setObservacion(e.target.value)}
+                    placeholder="Ingrese una observación"
                   />
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 </div>
               </div>
-
-              <Card className="border-gray-200">
-                <CardHeader className="p-4">
-                  <CardTitle className="text-base">Resultados de búsqueda</CardTitle>
-                </CardHeader>
-                <ScrollArea className="h-[300px]">
-                  <CardContent className="p-0">
-                    {filteredUsers.length > 0 ? (
-                      <div className="divide-y">
-                        {filteredUsers.map((user) => (
-                          <div
-                            key={user.id}
-                            className="flex items-center justify-between p-4 hover:bg-gray-50 cursor-pointer"
-                            onClick={() => handleSelectUser(user)}
-                          >
-                            <div className="flex items-center space-x-4">
-                              <Avatar>
-                                <AvatarFallback className="bg-blue-100 text-blue-700">
-                                  {getInitials(user.nombre, user.apellidos)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <p className="font-medium">
-                                  {user.nombre} {user.apellidos}
-                                </p>
-                                <p className="text-sm text-muted-foreground">DNI: {user.dni}</p>
-                                {user.rol === "alumno" ? (
-                                  <p className="text-xs text-muted-foreground">
-                                    {user.grado} {user.seccion}
-                                  </p>
-                                ) : (
-                                  <p className="text-xs text-muted-foreground">{user.especialidad}</p>
-                                )}
-                              </div>
-                            </div>
-                            <Button variant="ghost" size="sm">
-                              Seleccionar
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center h-[200px] p-4">
-                        <UserX className="h-12 w-12 text-gray-300 mb-2" />
-                        <p className="text-muted-foreground text-center">
-                          No se encontraron resultados para tu búsqueda
-                        </p>
-                      </div>
-                    )}
-                  </CardContent>
-                </ScrollArea>
-              </Card>
             </CardContent>
+            <CardFooter className="flex justify-between">
+              <Button variant="outline" onClick={() => setActiveTab("escanear")}>
+                Cancelar
+              </Button>
+              <Button onClick={handleRegistroManual} disabled={loading || !selectedUsuario}>
+                {loading ? "Registrando..." : "Registrar Asistencia"}
+              </Button>
+            </CardFooter>
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Diálogo para confirmar registro de asistencia */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Registrar Asistencia</DialogTitle>
-            <DialogDescription>Confirma los datos y el estado de asistencia para el registro</DialogDescription>
-          </DialogHeader>
-
-          {selectedUser && (
-            <div className="space-y-4 py-4">
-              <div className="flex items-center space-x-4">
-                <Avatar className="h-12 w-12">
-                  <AvatarFallback className="bg-blue-100 text-blue-700 text-lg">
-                    {getInitials(selectedUser.nombre, selectedUser.apellidos)}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="font-medium text-lg">
-                    {selectedUser.nombre} {selectedUser.apellidos}
-                  </p>
-                  <p className="text-sm text-muted-foreground">DNI: {selectedUser.dni}</p>
-                  {selectedUser.rol === "alumno" ? (
-                    <div className="flex items-center mt-1">
-                      <Badge variant="outline" className="mr-2">
-                        {selectedUser.grado} {selectedUser.seccion}
-                      </Badge>
-                      <Badge>{selectedUser.rol}</Badge>
-                    </div>
-                  ) : (
-                    <div className="flex items-center mt-1">
-                      <Badge variant="outline" className="mr-2">
-                        {selectedUser.especialidad}
-                      </Badge>
-                      <Badge>{selectedUser.rol}</Badge>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="estado">Estado de asistencia</Label>
-                <Select value={selectedEstado} onValueChange={setSelectedEstado}>
-                  <SelectTrigger id="estado">
-                    <SelectValue placeholder="Selecciona un estado" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="presente">
-                      <div className="flex items-center">
-                        <CheckCircle className="h-4 w-4 text-green-500 mr-2" /> Presente
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="tardanza">
-                      <div className="flex items-center">
-                        <Clock className="h-4 w-4 text-yellow-500 mr-2" /> Tardanza
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="ausente">
-                      <div className="flex items-center">
-                        <XCircle className="h-4 w-4 text-red-500 mr-2" /> Ausente
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="justificado">
-                      <div className="flex items-center">
-                        <AlertCircle className="h-4 w-4 text-blue-500 mr-2" /> Justificado
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="observacion">Observación (opcional)</Label>
-                <Input id="observacion" placeholder="Ingresa una observación si es necesario" />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsDialogOpen(false)}
-              disabled={isRegistering || isSuccess}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleRegisterAttendance}
-              disabled={isRegistering || isSuccess}
-              className={isSuccess ? "bg-green-600 hover:bg-green-700" : ""}
-            >
-              {isRegistering ? (
-                <>
-                  <svg
-                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Registrando...
-                </>
-              ) : isSuccess ? (
-                <>
-                  <CheckCircle className="mr-2 h-4 w-4" /> Registrado con éxito
-                </>
-              ) : (
-                "Registrar Asistencia"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
