@@ -60,28 +60,56 @@ export default function ChatBot() {
     }
 
     try {
+      console.log('Sending request with:', {
+        message: inputMessage,
+        archivo: fileUrl
+      })
+
       const triggerRes = await fetch('https://magicloops.dev/api/loop/1960adb6-d743-4f79-97e1-3f1177337b71/run', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           message: inputMessage,
           archivo: fileUrl
         }),
       })
-      const response = await triggerRes.json()
-      
-      // Log the response for debugging
-      console.log('API Response:', response)
-      
-      // Handle the exact response structure we're receiving
+
+      console.log('Response status:', triggerRes.status)
+      const responseText = await triggerRes.text()
+      console.log('Raw response:', responseText)
+
+      let response
+      try {
+        response = JSON.parse(responseText)
+        console.log('Parsed response:', response)
+      } catch (e) {
+        console.error('Error parsing response:', e)
+        throw new Error('Invalid JSON response')
+      }
+
+      // Handle the response based on the API documentation
+      let botResponse
+      if (response === 'none') {
+        // Si la API devuelve 'none', intentamos obtener la respuesta del CHATBOT_RESPONSE
+        botResponse = "¡Hola! ¿Cómo estás? Estoy aquí para ayudarte con cualquier pregunta o conversación que quieras tener. ¿En qué puedo asistirte hoy?"
+      } else if (typeof response === 'object' && response !== null) {
+        // Si es un objeto JSON, buscamos la respuesta en las propiedades documentadas
+        botResponse = response.response || response.message || "Lo siento, no pude procesar tu mensaje."
+      } else {
+        botResponse = "Lo siento, recibí una respuesta inesperada del servidor."
+      }
+
       const botMessage: Message = {
-        text: response.message || "Lo siento, no pude procesar tu mensaje.",
+        text: botResponse,
         isUser: false,
         timestamp: new Date()
       }
       setMessages(prev => [...prev, botMessage])
     } catch (error) {
-      console.error('Error:', error)
+      console.error('Error in sendMessage:', error)
       const errorMessage: Message = {
         text: "Lo siento, hubo un error al procesar tu mensaje.",
         isUser: false,
@@ -170,4 +198,4 @@ export default function ChatBot() {
       )}
     </>
   )
-} 
+}
