@@ -84,34 +84,51 @@ export default function HorariosPage() {
         setLoading(true)
 
         // Obtener grupos con información relacionada
-        const { data, error } = await supabase
+        const { data: gruposData, error: gruposError } = await supabase
           .from("grupos")
           .select(`
             id,
-            curso:cursos!inner(nombre),
-            grado:grados!inner(nombre),
-            seccion:secciones!inner(nombre),
-            profesor:usuarios!inner(nombre, apellidos)
+            cursos:cursos(nombre),
+            grados:grados(nombre),
+            secciones:secciones(nombre),
+            grupo_profesor(
+              usuarios(nombre, apellidos)
+            )
           `)
           .eq("activo", true)
           .order("id")
-          .returns<Grupo[]>()
 
-        if (error) {
-          console.error("Error detallado:", error)
-          throw error
+        if (gruposError) {
+          console.error("Error al cargar grupos:", gruposError)
+          throw gruposError
         }
 
-        if (!data || data.length === 0) {
-          console.log("No se encontraron grupos activos")
-        }
+        // Transformar los datos para que coincidan con la interfaz Grupo
+        const gruposTransformados: Grupo[] = (gruposData || []).map(grupo => {
+          const curso = Array.isArray(grupo.cursos) ? grupo.cursos[0] : grupo.cursos
+          const grado = Array.isArray(grupo.grados) ? grupo.grados[0] : grupo.grados
+          const seccion = Array.isArray(grupo.secciones) ? grupo.secciones[0] : grupo.secciones
+          const profesorData = grupo.grupo_profesor?.[0]?.usuarios
+          const profesor = Array.isArray(profesorData) ? profesorData[0] : profesorData
 
-        setGrupos(data || [])
+          return {
+            id: grupo.id,
+            curso: { nombre: curso?.nombre || '' },
+            grado: { nombre: grado?.nombre || '' },
+            seccion: { nombre: seccion?.nombre || '' },
+            profesor: {
+              nombre: profesor?.nombre || '',
+              apellidos: profesor?.apellidos || ''
+            }
+          }
+        })
+
+        setGrupos(gruposTransformados)
       } catch (error) {
         console.error("Error al cargar grupos:", error)
         toast({
           title: "Error",
-          description: "No se pudieron cargar los grupos",
+          description: "No se pudieron cargar los grupos. Por favor, intente nuevamente.",
           variant: "destructive",
         })
       } finally {
