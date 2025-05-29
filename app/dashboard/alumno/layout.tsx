@@ -10,18 +10,29 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { BookOpen, Calendar, MessageSquare, User, Settings, LogOut, Menu, X, CheckSquare, FileText } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getSupabaseBrowser } from "@/lib/supabase-browser"
 
 export default function AlumnoLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, signOut } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const supabase = getSupabaseBrowser()
 
   useEffect(() => {
     if (!loading && !user) {
       router.push("/login")
     }
   }, [user, loading, router])
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut()
+      router.push("/login")
+    } catch (error) {
+      console.error("Error al cerrar sesión:", error)
+    }
+  }
 
   if (loading) {
     return (
@@ -104,7 +115,7 @@ export default function AlumnoLayout({ children }: { children: React.ReactNode }
             <Button
               variant="outline"
               className="w-full justify-start text-white border-white/20 hover:bg-white/10 hover:text-white"
-              onClick={signOut}
+              onClick={handleLogout}
             >
               <LogOut className="mr-2 h-4 w-4" />
               Cerrar sesión

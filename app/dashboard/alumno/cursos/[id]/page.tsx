@@ -117,7 +117,7 @@ export default function CursoDetailPage({ params }: { params: { id: string } }) 
       <div className="flex h-full flex-col items-center justify-center">
         <h2 className="text-2xl font-bold">Curso no encontrado</h2>
         <p className="text-muted-foreground">El curso que buscas no existe o no tienes acceso</p>
-        <Link href="/alumno/cursos">
+        <Link href="/dashboard/alumno/cursos">
           <Button className="mt-4">Volver a mis cursos</Button>
         </Link>
       </div>
@@ -151,7 +151,7 @@ export default function CursoDetailPage({ params }: { params: { id: string } }) 
     <div className="space-y-6">
       <div className="flex flex-col space-y-2">
         <div className="flex items-center space-x-2">
-          <Link href="/alumno/cursos">
+          <Link href="/dashboard/alumno/cursos">
             <Button variant="ghost" size="sm">
               ← Volver
             </Button>

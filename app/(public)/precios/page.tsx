@@ -1,3 +1,5 @@
+'use client';
+
 import { HeroSection } from "@/components/ui/hero-section"
 
 export default function MatriculaPage() {
@@ -57,10 +59,31 @@ export default function MatriculaPage() {
 
   return (
     <div className="min-h-screen">
-      <HeroSection 
-        title="Matrícula 2024" 
-        description="Asegura el futuro de tus hijos con una educación de calidad"
-      />
+      {/* Hero personalizado para Matrícula */}
+<section className="relative bg-gradient-to-br from-blue-600 to-purple-600 text-white">
+  <div className="container mx-auto px-4 py-24">
+    <div className="max-w-3xl mx-auto text-center">
+      <h1 className="text-5xl font-bold mb-6">Matrícula 2024</h1>
+      <p className="text-xl mb-8">Asegura el futuro de tus hijos con una educación de calidad</p>
+      <button
+        className="bg-white text-blue-700 hover:bg-blue-100 px-6 py-3 rounded-lg font-semibold transition"
+        onClick={() => window.scrollTo({ top: 700, behavior: "smooth" })}
+      >
+        Ver Niveles Educativos
+      </button>
+    </div>
+  </div>
+  <div className="absolute bottom-0 left-0 right-0">
+    <svg
+      className="w-full h-16 fill-white"
+      viewBox="0 0 1440 100"
+      preserveAspectRatio="none"
+    >
+      <path d="M0,0 L1440,0 L1440,100 L0,100 L0,0 L1440,100 L1440,0 Z" />
+    </svg>
+  </div>
+</section>
+
 
       {/* Sección de Niveles Educativos con fondo inclinado */}
       <section className="relative py-24 overflow-hidden">

@@ -12,7 +12,7 @@ export default function HomePage() {
     <div className="min-h-screen">
       {/* Hero Section */}
       <section className="relative bg-gradient-to-br from-blue-500 to-blue-400 text-white">
-        <div className="container mx-auto px-4 py-32">
+        <div className="container mx-auto px-4 py-24">
           <div className="max-w-3xl mx-auto text-center">
             <h1 className="text-5xl font-bold mb-6">Bienvenido a Nuestro Colegio</h1>
             <p className="text-xl mb-8">Un lugar donde la excelencia académica se encuentra con el desarrollo personal</p>

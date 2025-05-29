@@ -10,10 +10,27 @@ export default function NosotrosPage() {
 
   return (
     <div className="min-h-screen">
-      <HeroSection 
-        title="Nosotros" 
-        description="Conoce nuestra historia y trayectoria educativa"
-      />
+      {/* Hero Section personalizado para "Nosotros" */}
+<section className="relative bg-gradient-to-br from-blue-600 to-blue-400 text-white overflow-hidden">
+  <div className="container mx-auto px-4 py-24">
+    <div className="max-w-3xl mx-auto text-center">
+      <h1 className="text-5xl md:text-6xl font-bold mb-6 drop-shadow-lg">Nosotros</h1>
+      <p className="text-xl md:text-2xl mb-8 drop-shadow-md">
+        Conoce nuestra historia y trayectoria educativa
+      </p>
+    </div>
+  </div>
+  <div className="absolute bottom-0 left-0 right-0">
+    <svg
+      className="w-full h-16 fill-white"
+      viewBox="0 0 1440 100"
+      preserveAspectRatio="none"
+    >
+      <path d="M0,0 L1440,0 L1440,100 L0,100 L0,0 L1440,100 L1440,0 Z" />
+    </svg>
+  </div>
+</section>
+
 
       {/* Valores */}
       <section className="bg-white py-20">

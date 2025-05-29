@@ -165,7 +165,7 @@ export default function TareaDetailPage({ params }: { params: { id: string } }) 
       <div className="flex h-full flex-col items-center justify-center">
         <h2 className="text-2xl font-bold">Tarea no encontrada</h2>
         <p className="text-muted-foreground">La tarea que buscas no existe o no tienes acceso</p>
-        <Link href="/alumno/tareas">
+        <Link href="/dashboard/alumno/tareas">
           <Button className="mt-4">Volver a mis tareas</Button>
         </Link>
       </div>
@@ -239,7 +239,7 @@ export default function TareaDetailPage({ params }: { params: { id: string } }) 
     <div className="space-y-6">
       <div className="flex flex-col space-y-2">
         <div className="flex items-center space-x-2">
-          <Link href="/alumno/tareas">
+          <Link href="/dashboard/alumno/tareas">
             <Button variant="ghost" size="sm">
               <ArrowLeft className="mr-1 h-4 w-4" />
               Volver

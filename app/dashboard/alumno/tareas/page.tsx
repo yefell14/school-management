@@ -223,7 +223,7 @@ export default function TareasPage() {
                                 <span>Fecha de entrega: {formatDate(tarea.fecha_entrega)}</span>
                               </div>
                             </div>
-                            <Link href={`/alumno/tareas/${tarea.id}`}>
+                            <Link href={`/dashboard/alumno/tareas/${tarea.id}`}>
                               <Button variant="outline" size="sm">
                                 Ver detalles
                               </Button>
