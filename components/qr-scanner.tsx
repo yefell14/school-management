@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Loader2, Camera, CameraOff } from "lucide-react"
-import { validateQRCode, registerAttendance } from "@/lib/qr-utils"
 import { useAuth } from "@/contexts/auth-context"
 import { toast } from "@/components/ui/use-toast"
+import { supabase } from "@/lib/supabase"
 
 interface QrScannerProps {
   onScan?: (decodedText: string) => void
@@ -18,188 +18,135 @@ interface QrScannerProps {
   tipo?: 'alumno' | 'profesor'
 }
 
-export function QrScanner({
-  onScan,
-  title = "Escanear Código QR",
-  description = "Apunta la cámara al código QR para escanearlo.",
-  tipo = 'alumno'
-}: QrScannerProps) {
-  const { user } = useAuth()
+export default function QrScanner({ onScan, title, description, tipo }: QrScannerProps) {
   const [scanning, setScanning] = useState(false)
-  const [html5QrCode, setHtml5QrCode] = useState<Html5Qrcode | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [cameraId, setCameraId] = useState<string | null>(null)
-  const [cameras, setCameras] = useState<Array<{ id: string; label: string }>>([])
-  const [loading, setLoading] = useState(false)
+  const [html5QrCode, setHtml5QrCode] = useState<Html5Qrcode | null>(null)
+  const { user } = useAuth()
 
   useEffect(() => {
     // Inicializar el escáner
-    const qrCodeScanner = new Html5Qrcode("qr-reader")
-    setHtml5QrCode(qrCodeScanner)
+    const qrCode = new Html5Qrcode("reader")
+    setHtml5QrCode(qrCode)
 
-    // Obtener la lista de cámaras disponibles
-    Html5Qrcode.getCameras()
-      .then((devices) => {
-        if (devices && devices.length) {
-          setCameras(devices)
-          setCameraId(devices[0].id)
-        }
-      })
-      .catch((err) => {
-        setError("Error al acceder a las cámaras: " + err)
-      })
-
-    // Limpiar al desmontar
     return () => {
-      if (qrCodeScanner && qrCodeScanner.isScanning) {
-        qrCodeScanner.stop().catch((err) => console.error("Error al detener el escáner:", err))
+      if (qrCode) {
+        qrCode.stop().catch(console.error)
       }
     }
   }, [])
 
-  const handleScan = async (decodedText: string) => {
-    if (!user) return
-
-    setLoading(true)
-    setError(null)
-
-    try {
-      // Validar el código QR
-      const qrData = await validateQRCode(decodedText)
-
-      // Registrar la asistencia
-      await registerAttendance(user.id, qrData, tipo)
-
-      toast({
-        title: "Asistencia registrada",
-        description: "La asistencia se ha registrado correctamente",
-      })
-
-      // Detener el escaneo
-      if (html5QrCode && html5QrCode.isScanning) {
-        await html5QrCode.stop()
-        setScanning(false)
-      }
-
-      // Llamar al callback si existe
-      if (onScan) {
-        onScan(decodedText)
-      }
-    } catch (error: any) {
-      setError(error.message || "Error al procesar el código QR")
-      toast({
-        title: "Error",
-        description: error.message || "Error al procesar el código QR",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const startScanning = async () => {
-    if (!html5QrCode || !cameraId) return
+    if (!html5QrCode) return
 
-    setLoading(true)
+    setScanning(true)
     setError(null)
 
     try {
       await html5QrCode.start(
-        cameraId,
+        { facingMode: "environment" },
         {
           fps: 10,
           qrbox: { width: 250, height: 250 },
         },
-        handleScan,
-        (errorMessage) => {
-          // Ignorar errores durante el escaneo
-        },
-      )
-      setScanning(true)
-    } catch (err) {
-      setError("Error al iniciar el escáner: " + err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const stopScanning = () => {
-    if (html5QrCode && html5QrCode.isScanning) {
-      html5QrCode
-        .stop()
-        .then(() => {
+        async (decodedText) => {
+          // Detener el escaneo después de una lectura exitosa
+          await html5QrCode.stop()
           setScanning(false)
-        })
-        .catch((err) => {
-          console.error("Error al detener el escáner:", err)
-        })
+
+          try {
+            // Validar el formato del QR (usuario-id o curso-id)
+            const [tipo, id] = decodedText.split("-")
+            
+            if (!tipo || !id) {
+              throw new Error("Formato de QR inválido")
+            }
+
+            // Verificar que el usuario/curso existe
+            let data
+            if (tipo === "usuario") {
+              const { data: userData, error } = await supabase
+                .from("usuarios")
+                .select("*")
+                .eq("id", id)
+                .single()
+              
+              if (error || !userData) {
+                throw new Error("Usuario no encontrado")
+              }
+              data = userData
+            } else if (tipo === "curso") {
+              const { data: cursoData, error } = await supabase
+                .from("cursos")
+                .select("*")
+                .eq("id", id)
+                .single()
+              
+              if (error || !cursoData) {
+                throw new Error("Curso no encontrado")
+              }
+              data = cursoData
+            } else {
+              throw new Error("Tipo de QR no válido")
+            }
+
+            // Si todo está bien, llamar al callback
+            if (onScan) {
+              onScan(decodedText)
+            }
+
+          } catch (error: any) {
+            setError(error.message || "Error al procesar el código QR")
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: error.message || "Error al procesar el código QR"
+            })
+          }
+        },
+        (errorMessage) => {
+          console.error(errorMessage)
+        }
+      )
+    } catch (err: any) {
+      setError(err.message || "Error al iniciar el escáner")
+      setScanning(false)
     }
   }
 
-  const handleCameraChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setCameraId(e.target.value)
-    if (scanning && html5QrCode) {
-      stopScanning()
+  const stopScanning = async () => {
+    if (html5QrCode && scanning) {
+      await html5QrCode.stop()
+      setScanning(false)
     }
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="w-full max-w-md mx-auto">
+      <div id="reader" className="w-full"></div>
+      
+      <div className="mt-4 space-y-4">
         {error && (
           <Alert variant="destructive">
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-
-        {cameras.length > 1 && (
-          <div className="space-y-2">
-            <label htmlFor="camera-select" className="text-sm font-medium">
-              Seleccionar cámara
-            </label>
-            <select
-              id="camera-select"
-              value={cameraId || ""}
-              onChange={handleCameraChange}
-              className="w-full p-2 border rounded-md"
-              disabled={scanning}
-            >
-              {cameras.map((camera) => (
-                <option key={camera.id} value={camera.id}>
-                  {camera.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div id="qr-reader" className="w-full h-64 overflow-hidden rounded-lg border"></div>
-
+        
         <div className="flex justify-center">
           {!scanning ? (
-            <Button onClick={startScanning} disabled={loading || !cameraId}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Iniciando...
-                </>
-              ) : (
-                <>
-                  <Camera className="mr-2 h-4 w-4" /> Iniciar Escaneo
-                </>
-              )}
+            <Button onClick={startScanning}>
+              <Camera className="h-4 w-4 mr-2" />
+              Iniciar Escaneo
             </Button>
           ) : (
-            <Button onClick={stopScanning} variant="destructive">
-              <CameraOff className="mr-2 h-4 w-4" /> Detener Escaneo
+            <Button variant="secondary" onClick={stopScanning}>
+              <CameraOff className="h-4 w-4 mr-2" />
+              Detener Escaneo
             </Button>
           )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

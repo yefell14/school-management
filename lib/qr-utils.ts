@@ -1,10 +1,10 @@
 import { supabase } from './supabase';
 
 interface QRData {
-  curso_id: string;
-  grupo_id: string;
+  tipo: 'usuario' | 'curso';
+  id: string;
   timestamp: number;
-  expiracion: number;
+  expiracion?: number;
 }
 
 export async function generateQRCode(cursoId: string, grupoId: string): Promise<string> {
@@ -15,14 +15,14 @@ export async function generateQRCode(cursoId: string, grupoId: string): Promise<
 
     // Crear objeto con datos del QR
     const qrData: QRData = {
-      curso_id: cursoId,
-      grupo_id: grupoId,
+      tipo: 'curso',
+      id: cursoId,
       timestamp,
       expiracion
     };
 
-    // Convertir a string y codificar en base64
-    const qrString = btoa(JSON.stringify(qrData));
+    // Convertir a string
+    const qrString = `curso-${cursoId}`;
 
     // Guardar en la base de datos
     const { error } = await supabase
@@ -46,36 +46,47 @@ export async function generateQRCode(cursoId: string, grupoId: string): Promise<
 
 export async function validateQRCode(qrString: string): Promise<QRData> {
   try {
-    // Decodificar el string base64
-    const decodedData = JSON.parse(atob(qrString)) as QRData;
-
-    // Verificar que el QR existe en la base de datos y está activo
-    const { data, error } = await supabase
-      .from('qr_asistencias_curso')
-      .select('*')
-      .eq('qr_codigo', qrString)
-      .eq('activo', true)
-      .single();
-
-    if (error || !data) {
-      throw new Error('Código QR inválido o expirado');
+    // Validar formato básico (tipo-id)
+    const [tipo, id] = qrString.split('-');
+    
+    if (!tipo || !id) {
+      throw new Error('Formato de QR inválido');
     }
 
-    // Verificar que no haya expirado
-    if (Date.now() > decodedData.expiracion) {
-      // Marcar como inactivo en la base de datos
-      await supabase
-        .from('qr_asistencias_curso')
-        .update({ activo: false })
-        .eq('qr_codigo', qrString);
-
-      throw new Error('El código QR ha expirado');
+    if (tipo !== 'usuario' && tipo !== 'curso') {
+      throw new Error('Tipo de QR no válido');
     }
 
-    return decodedData;
-  } catch (error) {
-    console.error('Error validando QR:', error);
-    throw error;
+    // Verificar que el usuario/curso existe
+    if (tipo === 'usuario') {
+      const { data: userData, error } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error || !userData) {
+        throw new Error('Usuario no encontrado');
+      }
+    } else if (tipo === 'curso') {
+      const { data: cursoData, error } = await supabase
+        .from('cursos')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error || !cursoData) {
+        throw new Error('Curso no encontrado');
+      }
+    }
+
+    return {
+      tipo,
+      id,
+      timestamp: Date.now()
+    };
+  } catch (error: any) {
+    throw new Error(error.message || 'Error al validar el código QR');
   }
 }
 
@@ -85,37 +96,35 @@ export async function registerAttendance(
   tipo: 'alumno' | 'profesor'
 ): Promise<void> {
   try {
-    const fechaHoy = new Date().toISOString().split('T')[0];
-    
-    // Verificar si ya existe una asistencia para hoy
-    const { data: asistenciaExistente } = await supabase
-      .from('asistencias_general')
-      .select('*')
-      .eq('usuario_id', userId)
-      .eq('fecha', fechaHoy)
-      .maybeSingle();
+    const timestamp = new Date().toISOString();
 
-    if (asistenciaExistente) {
-      // Actualizar hora de salida
-      await supabase
-        .from('asistencias_general')
-        .update({
-          hora_salida: new Date().toLocaleTimeString(),
-        })
-        .eq('id', asistenciaExistente.id);
-    } else {
-      // Registrar nueva asistencia
-      await supabase.from('asistencias_general').insert({
-        usuario_id: userId,
-        rol: tipo,
-        grupo_id: qrData.grupo_id,
-        fecha: fechaHoy,
-        estado: 'presente',
-        hora_entrada: new Date().toLocaleTimeString(),
-      });
+    // Si es un QR de curso, registrar asistencia al curso
+    if (qrData.tipo === 'curso') {
+      const { error } = await supabase
+        .from('asistencias')
+        .insert({
+          estudiante_id: userId,
+          curso_id: qrData.id,
+          fecha: timestamp,
+          estado: 'presente',
+          tipo_asistencia: tipo
+        });
+
+      if (error) {
+        if (error.code === '23505') { // Error de duplicado
+          throw new Error('Ya se ha registrado la asistencia para esta clase');
+        }
+        throw error;
+      }
     }
-  } catch (error) {
-    console.error('Error registrando asistencia:', error);
-    throw new Error('No se pudo registrar la asistencia');
+    // Si es un QR de usuario, verificar que coincida con el usuario que está registrando
+    else if (qrData.tipo === 'usuario') {
+      if (userId !== qrData.id) {
+        throw new Error('El código QR no corresponde al usuario actual');
+      }
+      // Aquí podrías implementar otra lógica si es necesario
+    }
+  } catch (error: any) {
+    throw new Error(error.message || 'Error al registrar la asistencia');
   }
 } 

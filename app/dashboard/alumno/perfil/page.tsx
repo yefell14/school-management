@@ -17,8 +17,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { User, Lock, QrCode, Phone, Mail, MapPin, Calendar } from "lucide-react"
+import { User, Lock, Phone, Mail, MapPin, Calendar, Download } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { QRCodeSVG } from "qrcode.react"
 
 export default function PerfilPage() {
   const { user } = useAuth()
@@ -283,13 +284,42 @@ export default function PerfilPage() {
               <CardDescription>Utiliza este código QR para marcar tu asistencia</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center justify-center p-6">
-              <div className="rounded-lg border border-dashed p-8">
-                <QrCode className="h-48 w-48" />
+              <div className="bg-white p-6 rounded-lg shadow-md border-2 border-blue-200 w-64 text-center">
+                <h3 className="font-bold text-lg mb-2">Código QR Personal</h3>
+                <div className="bg-white w-48 h-48 mx-auto flex items-center justify-center">
+                  {user && (
+                    <QRCodeSVG
+                      value={`usuario-${user.id}`}
+                      size={200}
+                      level="H"
+                      includeMargin={true}
+                    />
+                  )}
+                </div>
+                <p className="text-sm mt-4">
+                  {user.nombre} {user.apellidos}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">{user.dni || "Sin DNI"}</p>
               </div>
-              <p className="mt-4 text-center text-sm text-muted-foreground">
-                Muestra este código QR a tu profesor para registrar tu asistencia a clases
-              </p>
-              <Button className="mt-4">Descargar QR</Button>
+              <div className="mt-6 space-y-2 text-center">
+                <Button onClick={() => {
+                  const canvas = document.querySelector('canvas');
+                  if (canvas) {
+                    const link = document.createElement('a');
+                    link.href = canvas.toDataURL('image/png');
+                    link.download = `qr_${user.nombre}_${user.apellidos}.png`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }
+                }}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Descargar Código QR
+                </Button>
+                <p className="text-sm text-muted-foreground">
+                  Muestra este código QR a tu profesor para registrar tu asistencia a clases
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

@@ -17,11 +17,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
-import { User, Mail, Phone, MapPin, Key, QrCode, LogOut, ArrowLeft } from "lucide-react"
+import { User, Mail, Phone, MapPin, Key, Download, LogOut, ArrowLeft } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { getCurrentUser } from "@/lib/auth"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { QRCodeSVG } from "qrcode.react"
 
 interface UserData {
   id: string;
@@ -457,8 +458,15 @@ export default function PerfilPage() {
             <CardContent className="flex flex-col items-center py-6">
               <div className="bg-white p-6 rounded-lg shadow-md border-2 border-blue-200 w-64 text-center">
                 <h3 className="font-bold text-lg mb-2">Código QR Personal</h3>
-                <div className="bg-gray-200 w-48 h-48 mx-auto flex items-center justify-center">
-                  <QrCode className="h-32 w-32 text-blue-700" />
+                <div className="bg-white w-48 h-48 mx-auto flex items-center justify-center">
+                  {userData && (
+                    <QRCodeSVG
+                      value={`usuario-${userData.id}`}
+                      size={200}
+                      level="H"
+                      includeMargin={true}
+                    />
+                  )}
                 </div>
                 <p className="text-sm mt-4">
                   {userData.nombre} {userData.apellidos}
@@ -466,7 +474,20 @@ export default function PerfilPage() {
                 <p className="text-xs text-muted-foreground mt-1">{userData.dni}</p>
               </div>
               <div className="mt-6 space-y-2 text-center">
-                <Button>Descargar Código QR</Button>
+                <Button onClick={() => {
+                  const canvas = document.querySelector('canvas');
+                  if (canvas) {
+                    const link = document.createElement('a');
+                    link.href = canvas.toDataURL('image/png');
+                    link.download = `qr_${userData.nombre}_${userData.apellidos}.png`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }
+                }}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Descargar Código QR
+                </Button>
                 <p className="text-sm text-muted-foreground">
                   Muestra este código para registrar tu asistencia o acceder a recursos.
                 </p>
