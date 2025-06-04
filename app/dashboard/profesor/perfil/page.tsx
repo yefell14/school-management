@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { User, Phone, Mail, MapPin, Calendar, AlertTriangle } from "lucide-react"
+import { User, Phone, Mail, MapPin, Calendar, AlertTriangle, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,19 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { QRCodeSVG } from "qrcode.react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { useToast } from "@/hooks/use-toast"
+import { QRCodeCanvas } from "qrcode.react"
+import { convertQRtoJPG } from "@/lib/qr-utils"
 
 interface TeacherProfile {
   id: string
@@ -37,6 +50,8 @@ export default function TeacherProfilePage() {
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null)
   const [changingPassword, setChangingPassword] = useState(false)
   const supabase = createClientComponentClient()
+  const qrRef = useRef<HTMLDivElement>(null)
+  const { toast } = useToast()
 
   useEffect(() => {
     async function fetchProfile() {
@@ -356,23 +371,94 @@ export default function TeacherProfilePage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="qr">
+          <TabsContent value="qr" className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>Mi Código QR</CardTitle>
-                <CardDescription>Utilice este código QR para identificarse en el sistema</CardDescription>
+                <CardDescription>Utiliza este código QR para registrar tu asistencia</CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-col items-center justify-center py-6">
-                <div className="bg-white p-4 rounded-lg shadow-md">
-                  <QRCodeSVG value={`profesor:${profile.id}`} size={200} level="H" includeMargin={true} />
+              <CardContent className="flex flex-col items-center justify-center p-6">
+                <div ref={qrRef} className="bg-white p-6 rounded-lg shadow-md border-2 border-blue-200 w-64 text-center">
+                  <h3 className="font-bold text-lg mb-2">Código QR Personal</h3>
+                  <div className="bg-white w-48 h-48 mx-auto flex items-center justify-center">
+                    {profile && (
+                      <QRCodeCanvas
+                        value={`usuario-${profile.id}`}
+                        size={200}
+                        level="H"
+                        includeMargin={true}
+                      />
+                    )}
+                  </div>
+                  <p className="text-sm mt-4">
+                    {profile?.nombre} {profile?.apellidos}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">{profile?.dni || "Sin DNI"}</p>
                 </div>
-                <p className="mt-4 text-center text-gray-600">
-                  Este código QR contiene su identificación única como profesor
-                </p>
+                <div className="mt-6 space-y-2 text-center">
+                  <Button onClick={() => {
+                    try {
+                      console.log('Iniciando descarga del QR');
+                      if (!qrRef.current) {
+                        console.error('No se encontró la referencia al contenedor del QR');
+                        toast({
+                          title: "Error",
+                          description: "No se pudo encontrar el código QR para descargar",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
+                      const canvas = qrRef.current.querySelector('canvas');
+                      console.log('Canvas encontrado:', canvas);
+                      
+                      if (!canvas) {
+                        console.error('No se encontró el elemento canvas dentro del contenedor del QR');
+                        toast({
+                          title: "Error",
+                          description: "No se pudo encontrar el código QR para descargar",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
+                      const link = document.createElement('a');
+                      try {
+                        link.href = convertQRtoJPG(canvas);
+                        link.download = `qr_${profile?.nombre}_${profile?.apellidos}.png`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        
+                        toast({
+                          title: "Éxito",
+                          description: "El código QR se ha descargado correctamente",
+                        });
+                      } catch (error) {
+                        console.error('Error al convertir o descargar el QR:', error);
+                        toast({
+                          title: "Error",
+                          description: "No se pudo descargar el código QR",
+                          variant: "destructive",
+                        });
+                      }
+                    } catch (error) {
+                      console.error('Error general al descargar el QR:', error);
+                      toast({
+                        title: "Error",
+                        description: "Ocurrió un error al procesar la descarga",
+                        variant: "destructive",
+                      });
+                    }
+                  }}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Descargar Código QR
+                  </Button>
+                  <p className="text-sm text-muted-foreground">
+                    Muestra este código QR para registrar tu asistencia a clases
+                  </p>
+                </div>
               </CardContent>
-              <CardFooter className="flex justify-center">
-                <Button>Descargar QR</Button>
-              </CardFooter>
             </Card>
           </TabsContent>
         </Tabs>

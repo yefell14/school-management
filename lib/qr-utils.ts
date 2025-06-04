@@ -7,6 +7,53 @@ interface QRData {
   expiracion?: number;
 }
 
+export function convertQRtoJPG(canvas: HTMLCanvasElement): string {
+  try {
+    console.log('Iniciando conversión de QR a PNG');
+    console.log('Canvas recibido:', canvas);
+    
+    // Crear un nuevo canvas con fondo blanco
+    const newCanvas = document.createElement('canvas');
+    const ctx = newCanvas.getContext('2d');
+    if (!ctx) {
+      console.error('No se pudo obtener el contexto 2D del canvas');
+      return '';
+    }
+
+    // Establecer dimensiones
+    const padding = 20;
+    newCanvas.width = canvas.width + (padding * 2);
+    newCanvas.height = canvas.height + (padding * 2);
+    console.log('Dimensiones del nuevo canvas:', { width: newCanvas.width, height: newCanvas.height });
+
+    // Dibujar fondo blanco
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, newCanvas.width, newCanvas.height);
+
+    // Dibujar el QR en el centro
+    try {
+      ctx.drawImage(canvas, padding, padding);
+      console.log('QR dibujado exitosamente en el nuevo canvas');
+    } catch (drawError) {
+      console.error('Error al dibujar el QR en el canvas:', drawError);
+      throw drawError;
+    }
+
+    // Convertir a PNG con alta calidad
+    try {
+      const dataUrl = newCanvas.toDataURL('image/png', 1.0);
+      console.log('Conversión a PNG exitosa');
+      return dataUrl;
+    } catch (convertError) {
+      console.error('Error al convertir a PNG:', convertError);
+      throw convertError;
+    }
+  } catch (error) {
+    console.error('Error general en la conversión del QR:', error);
+    throw error;
+  }
+}
+
 export async function generateQRCode(cursoId: string, grupoId: string): Promise<string> {
   try {
     // Generar timestamp actual y de expiración (24 horas)

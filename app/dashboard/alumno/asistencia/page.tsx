@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Calendar, CheckCircle2, XCircle, Clock, QrCode } from "lucide-react"
-import { QrScanner } from "@/components/qr-scanner"
+import QrScanner from "@/components/qr-scanner"
 
 type GrupoWithCurso = Omit<Grupo, 'curso'> & { curso: Pick<Curso, 'nombre'> }
 

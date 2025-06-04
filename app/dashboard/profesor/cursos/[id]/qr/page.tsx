@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { QRCodeSVG } from "qrcode.react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import { convertQRtoJPG } from "@/lib/qr-utils"
 
 interface CourseInfo {
   id: string
@@ -185,8 +186,8 @@ export default function CourseQRPage({ params }: { params: { id: string } }) {
     if (!canvas) return
 
     const link = document.createElement("a")
-    link.href = canvas.toDataURL("image/png")
-    link.download = `qr_${courseInfo?.nombre.replace(/\s+/g, "_")}_${format(new Date(), "yyyyMMdd")}.png`
+    link.href = convertQRtoJPG(canvas)
+    link.download = `qr_${courseInfo?.nombre.replace(/\s+/g, "_")}_${format(new Date(), "yyyyMMdd")}.jpg`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)

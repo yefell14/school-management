@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,7 +19,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { User, Lock, Phone, Mail, MapPin, Calendar, Download } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { QRCodeSVG } from "qrcode.react"
+import { QRCodeCanvas } from "qrcode.react"
+import { convertQRtoJPG } from "@/lib/qr-utils"
 
 export default function PerfilPage() {
   const { user } = useAuth()
@@ -30,6 +31,7 @@ export default function PerfilPage() {
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [changingPassword, setChangingPassword] = useState(false)
+  const qrRef = useRef<HTMLDivElement>(null)
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -284,11 +286,11 @@ export default function PerfilPage() {
               <CardDescription>Utiliza este código QR para marcar tu asistencia</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center justify-center p-6">
-              <div className="bg-white p-6 rounded-lg shadow-md border-2 border-blue-200 w-64 text-center">
+              <div ref={qrRef} className="bg-white p-6 rounded-lg shadow-md border-2 border-blue-200 w-64 text-center">
                 <h3 className="font-bold text-lg mb-2">Código QR Personal</h3>
                 <div className="bg-white w-48 h-48 mx-auto flex items-center justify-center">
                   {user && (
-                    <QRCodeSVG
+                    <QRCodeCanvas
                       value={`usuario-${user.id}`}
                       size={200}
                       level="H"
@@ -303,14 +305,58 @@ export default function PerfilPage() {
               </div>
               <div className="mt-6 space-y-2 text-center">
                 <Button onClick={() => {
-                  const canvas = document.querySelector('canvas');
-                  if (canvas) {
+                  try {
+                    console.log('Iniciando descarga del QR');
+                    if (!qrRef.current) {
+                      console.error('No se encontró la referencia al contenedor del QR');
+                      toast({
+                        title: "Error",
+                        description: "No se pudo encontrar el código QR para descargar",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
+                    const canvas = qrRef.current.querySelector('canvas');
+                    console.log('Canvas encontrado:', canvas);
+                    
+                    if (!canvas) {
+                      console.error('No se encontró el elemento canvas dentro del contenedor del QR');
+                      toast({
+                        title: "Error",
+                        description: "No se pudo encontrar el código QR para descargar",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
                     const link = document.createElement('a');
-                    link.href = canvas.toDataURL('image/png');
-                    link.download = `qr_${user.nombre}_${user.apellidos}.png`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
+                    try {
+                      link.href = convertQRtoJPG(canvas);
+                      link.download = `qr_${user.nombre}_${user.apellidos}.png`;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      
+                      toast({
+                        title: "Éxito",
+                        description: "El código QR se ha descargado correctamente",
+                      });
+                    } catch (error) {
+                      console.error('Error al convertir o descargar el QR:', error);
+                      toast({
+                        title: "Error",
+                        description: "No se pudo descargar el código QR",
+                        variant: "destructive",
+                      });
+                    }
+                  } catch (error) {
+                    console.error('Error general al descargar el QR:', error);
+                    toast({
+                      title: "Error",
+                      description: "Ocurrió un error al procesar la descarga",
+                      variant: "destructive",
+                    });
                   }
                 }}>
                   <Download className="h-4 w-4 mr-2" />
