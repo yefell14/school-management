@@ -1,25 +1,30 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Html5Qrcode } from "html5-qrcode"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Loader2, Camera, CameraOff } from "lucide-react"
+import { validateQRCode, registerAttendance } from "@/lib/qr-utils"
+import { useAuth } from "@/contexts/auth-context"
+import { toast } from "@/components/ui/use-toast"
 
 interface QrScannerProps {
-  onScan: (decodedText: string) => void
+  onScan?: (decodedText: string) => void
   title?: string
   description?: string
+  tipo?: 'alumno' | 'profesor'
 }
 
 export function QrScanner({
   onScan,
   title = "Escanear Código QR",
   description = "Apunta la cámara al código QR para escanearlo.",
+  tipo = 'alumno'
 }: QrScannerProps) {
+  const { user } = useAuth()
   const [scanning, setScanning] = useState(false)
   const [html5QrCode, setHtml5QrCode] = useState<Html5Qrcode | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -52,6 +57,46 @@ export function QrScanner({
     }
   }, [])
 
+  const handleScan = async (decodedText: string) => {
+    if (!user) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      // Validar el código QR
+      const qrData = await validateQRCode(decodedText)
+
+      // Registrar la asistencia
+      await registerAttendance(user.id, qrData, tipo)
+
+      toast({
+        title: "Asistencia registrada",
+        description: "La asistencia se ha registrado correctamente",
+      })
+
+      // Detener el escaneo
+      if (html5QrCode && html5QrCode.isScanning) {
+        await html5QrCode.stop()
+        setScanning(false)
+      }
+
+      // Llamar al callback si existe
+      if (onScan) {
+        onScan(decodedText)
+      }
+    } catch (error: any) {
+      setError(error.message || "Error al procesar el código QR")
+      toast({
+        title: "Error",
+        description: error.message || "Error al procesar el código QR",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const startScanning = async () => {
     if (!html5QrCode || !cameraId) return
 
@@ -65,18 +110,7 @@ export function QrScanner({
           fps: 10,
           qrbox: { width: 250, height: 250 },
         },
-        (decodedText) => {
-          // Detener el escaneo después de un escaneo exitoso
-          html5QrCode
-            .stop()
-            .then(() => {
-              setScanning(false)
-              onScan(decodedText)
-            })
-            .catch((err) => {
-              console.error("Error al detener el escáner:", err)
-            })
-        },
+        handleScan,
         (errorMessage) => {
           // Ignorar errores durante el escaneo
         },

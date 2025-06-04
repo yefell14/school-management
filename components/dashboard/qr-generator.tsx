@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { QRCodeSVG } from 'qrcode.react';
+import { generateQRCode } from '@/lib/qr-utils';
 import { toast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/supabase';
 
 interface QrGeneratorProps {
   onGenerateSuccess?: (qrCode: string) => void;
@@ -15,47 +15,44 @@ interface QrGeneratorProps {
 }
 
 export function QrGenerator({ onGenerateSuccess, onGenerateError }: QrGeneratorProps) {
-  const [qrValue, setQrValue] = useState('');
+  const [cursoId, setCursoId] = useState('');
+  const [grupoId, setGrupoId] = useState('');
+  const [qrCode, setQrCode] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
 
   const generateQR = async () => {
-    try {
-      setIsGenerating(true);
-
-      // Generar un código único para el QR
-      const qrCode = `QR_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      // Guardar el código QR en la base de datos
-      const { error } = await supabase
-        .from('qr_asistencias_curso')
-        .insert({
-          qr_codigo: qrCode,
-          curso_id: qrValue, // Asumiendo que qrValue es el ID del curso
-          fecha_creacion: new Date().toISOString(),
-          fecha_expiracion: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Expira en 24 horas
-          activo: true,
-        });
-
-      if (error) throw error;
-
-      setQrValue(qrCode);
+    if (!cursoId || !grupoId) {
       toast({
-        title: "Código QR generado",
+        title: "Error",
+        description: "Por favor ingresa el ID del curso y del grupo",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const qrString = await generateQRCode(cursoId, grupoId);
+      setQrCode(qrString);
+      
+      toast({
+        title: "QR Generado",
         description: "El código QR se ha generado correctamente",
       });
 
       if (onGenerateSuccess) {
-        onGenerateSuccess(qrCode);
+        onGenerateSuccess(qrString);
       }
-    } catch (error) {
-      console.error('Error al generar el código QR:', error);
+    } catch (error: any) {
+      console.error('Error generando QR:', error);
       toast({
         title: "Error",
-        description: "Ocurrió un error al generar el código QR",
+        description: error.message || "Error al generar el código QR",
         variant: "destructive",
       });
+      
       if (onGenerateError) {
-        onGenerateError(error instanceof Error ? error.message : 'Error desconocido');
+        onGenerateError(error.message);
       }
     } finally {
       setIsGenerating(false);
@@ -77,25 +74,35 @@ export function QrGenerator({ onGenerateSuccess, onGenerateError }: QrGeneratorP
             <Input
               id="curso"
               placeholder="Ingresa el ID del curso"
-              value={qrValue}
-              onChange={(e) => setQrValue(e.target.value)}
+              value={cursoId}
+              onChange={(e) => setCursoId(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="grupo">ID del Grupo</Label>
+            <Input
+              id="grupo"
+              placeholder="Ingresa el ID del grupo"
+              value={grupoId}
+              onChange={(e) => setGrupoId(e.target.value)}
             />
           </div>
 
           <div className="flex justify-center">
             <Button
               onClick={generateQR}
-              disabled={!qrValue || isGenerating}
+              disabled={!cursoId || !grupoId || isGenerating}
             >
               {isGenerating ? 'Generando...' : 'Generar QR'}
             </Button>
           </div>
 
-          {qrValue && (
+          {qrCode && (
             <div className="flex flex-col items-center space-y-4">
               <div className="p-4 bg-white rounded-lg shadow">
                 <QRCodeSVG
-                  value={qrValue}
+                  value={qrCode}
                   size={256}
                   level="H"
                   includeMargin={true}
