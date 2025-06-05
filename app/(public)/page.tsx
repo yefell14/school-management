@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { GraduationCap, BookOpen, Users, Calendar } from "lucide-react"
-import ChatBot from "@/components/ChatBot"
+import ChatbotContainer from "@/components/ChatbotContainer"
 
 export default function HomePage() {
   const router = useRouter()
@@ -96,7 +96,7 @@ export default function HomePage() {
       </section>
 
       {/* ChatBot */}
-      <ChatBot />
+      <ChatbotContainer />
     </div>
   )
 }
