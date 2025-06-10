@@ -7,8 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabase';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Camera, CameraOff } from "lucide-react";
+import { Camera, CameraOff, CheckCircle2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface QrScannerProps {
   onScanSuccess?: (result: string) => void;
@@ -19,6 +20,10 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [scanStatus, setScanStatus] = useState<{
+    type: 'success' | 'error' | 'info' | null;
+    message: string;
+  }>({ type: null, message: '' });
   const qrCodeRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
@@ -57,6 +62,7 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
       setCameraError(null);
       setIsProcessing(false);
       lastScannedRef.current = '';
+      setScanStatus({ type: null, message: '' });
 
       // Solicitar permisos de cámara primero
       await requestCameraPermission();
@@ -85,15 +91,8 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
             }
             lastScannedRef.current = decodedText;
 
-            // Detener el escaneo mientras procesamos
-            if (qrCodeRef.current) {
-              await qrCodeRef.current.stop();
-            }
+            // No detener el escáner, solo procesar el QR
             await handleQrCodeSuccess(decodedText);
-            // Reiniciar el escaneo después de procesar
-            if (isScanning) {
-              startScanner();
-            }
           },
           (errorMessage) => {
             // Ignorar errores de escaneo menores
@@ -184,6 +183,11 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
           throw updateError;
         }
 
+        setScanStatus({
+          type: 'success',
+          message: `Salida registrada: ${usuario.nombre} ${usuario.apellidos}`
+        });
+
         toast({
           title: "Salida registrada",
           description: `Se ha registrado la salida de ${usuario.nombre} ${usuario.apellidos}`,
@@ -205,6 +209,11 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
           throw insertError;
         }
 
+        setScanStatus({
+          type: 'success',
+          message: `Asistencia registrada: ${usuario.nombre} ${usuario.apellidos}`
+        });
+
         toast({
           title: "Asistencia registrada",
           description: `Se ha registrado la asistencia de ${usuario.nombre} ${usuario.apellidos}`,
@@ -215,8 +224,19 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
         onScanSuccess(decodedText);
       }
 
+      // Limpiar el estado después de 3 segundos
+      setTimeout(() => {
+        setScanStatus({ type: null, message: '' });
+        lastScannedRef.current = '';
+      }, 3000);
+
     } catch (error: any) {
       console.error('Error al procesar el código QR:', error);
+      setScanStatus({
+        type: 'error',
+        message: error.message || "Error al procesar el código QR"
+      });
+
       if (onScanError) {
         onScanError(error instanceof Error ? error.message : 'Error desconocido');
       }
@@ -225,6 +245,12 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
         description: error.message || "Error al procesar el código QR",
         variant: "destructive",
       });
+
+      // Limpiar el estado después de 3 segundos
+      setTimeout(() => {
+        setScanStatus({ type: null, message: '' });
+        lastScannedRef.current = '';
+      }, 3000);
     } finally {
       setIsProcessing(false);
     }
@@ -237,6 +263,7 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
         setIsScanning(false);
         setIsProcessing(false);
         lastScannedRef.current = '';
+        setScanStatus({ type: null, message: '' });
       } catch (error) {
         console.error('Error al detener el escáner:', error);
       }
@@ -260,7 +287,30 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
               <AlertDescription>{cameraError}</AlertDescription>
             </Alert>
           ) : (
-            <div ref={containerRef} id="qr-reader" className="w-full max-w-md mx-auto" />
+            <div className="relative">
+              <div ref={containerRef} id="qr-reader" className="w-full max-w-md mx-auto" />
+              <AnimatePresence>
+                {scanStatus.type && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 
+                      p-4 rounded-lg shadow-lg flex items-center gap-2
+                      ${scanStatus.type === 'success' ? 'bg-green-500' : 
+                        scanStatus.type === 'error' ? 'bg-red-500' : 'bg-blue-500'} 
+                      text-white`}
+                  >
+                    {scanStatus.type === 'success' ? (
+                      <CheckCircle2 className="h-5 w-5" />
+                    ) : (
+                      <AlertCircle className="h-5 w-5" />
+                    )}
+                    <span>{scanStatus.message}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           )}
           <div className="flex justify-center gap-4">
             {!isScanning ? (
