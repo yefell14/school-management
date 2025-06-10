@@ -41,11 +41,12 @@ export default function ChatBot() {
   const uploadFile = async (file: File) => {
     const formData = new FormData()
     formData.append('file', file)
-    const res = await fetch(`https://magicloops.dev/api/loop/1960adb6-d743-4f79-97e1-3f1177337b71/upload`, {
+    const res = await fetch(`https://magicloops.dev/api/loop/3eef6efe-56a0-4193-99de-4972722a731c/upload`, {
       method: 'POST',
       body: formData
     })
     const output = await res.json()
+    console.log('📎 Archivo subido:', output)
     return output.url
   }
 
@@ -53,7 +54,7 @@ export default function ChatBot() {
     if (!inputMessage.trim() && !selectedFile) return
 
     const userMessage: Message = {
-      text: inputMessage,
+      text: inputMessage || `📎 Archivo enviado: ${selectedFile?.name}`,
       isUser: true,
       timestamp: new Date()
     }
@@ -63,65 +64,57 @@ export default function ChatBot() {
 
     let fileUrl = ''
     if (selectedFile) {
-      fileUrl = await uploadFile(selectedFile)
+      try {
+        fileUrl = await uploadFile(selectedFile)
+      } catch (uploadErr) {
+        console.error('❌ Error al subir archivo:', uploadErr)
+      }
       setSelectedFile(null)
     }
 
     try {
-      console.log('Sending request with:', {
+      const payload = {
         message: inputMessage,
-        archivo: fileUrl
-      })
+        file: fileUrl // ← Asegura que coincida con lo que espera MagicLoops
+      }
 
-      const triggerRes = await fetch('https://magicloops.dev/api/loop/1960adb6-d743-4f79-97e1-3f1177337b71/run', {
+      console.log('📤 Enviando a MagicLoops:', payload)
+
+      const triggerRes = await fetch('https://magicloops.dev/api/loop/3eef6efe-56a0-4193-99de-4972722a731c/run', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        body: JSON.stringify({
-          message: inputMessage,
-          archivo: fileUrl
-        }),
+        body: JSON.stringify(payload),
       })
 
-      if (!triggerRes.ok) {
-        throw new Error(`HTTP error! status: ${triggerRes.status}`)
+      const responseText = await triggerRes.text()
+      console.log('📥 Respuesta cruda:', responseText)
+
+      let responseData: any
+      try {
+        responseData = JSON.parse(responseText)
+      } catch {
+        responseData = responseText
       }
 
-      const responseData = await triggerRes.json()
-      console.log('Response from MagicLoops:', responseData)
+      let botResponse = ''
 
-      let botResponse = ""
-      
-      // Si la respuesta es un objeto, intentamos extraer el mensaje
-      if (typeof responseData === 'object' && responseData !== null) {
-        // Primero intentamos obtener el mensaje del campo 'response'
-        if (responseData.response) {
-          botResponse = responseData.response
-        }
-        // Si no hay campo 'response', buscamos en otros campos comunes
-        else if (responseData.message) {
-          botResponse = responseData.message
-        }
-        else if (responseData.answer) {
-          botResponse = responseData.answer
-        }
-        else if (responseData.text) {
-          botResponse = responseData.text
-        }
-        // Si no encontramos ningún campo de texto, mostramos todo el objeto
-        else {
-          botResponse = JSON.stringify(responseData, null, 2)
-        }
-      }
-      // Si la respuesta es una cadena, la usamos directamente
-      else if (typeof responseData === 'string') {
+      if (responseData === 'none') {
+        botResponse = "¡Hola! ¿Cómo estás? Estoy aquí para ayudarte con cualquier pregunta o conversación que quieras tener. ¿En qué puedo asistirte hoy?"
+      } else if (typeof responseData === 'object' && responseData !== null) {
+        botResponse =
+          responseData.response ||
+          responseData.message ||
+          responseData.answer ||
+          responseData.text ||
+          responseData.$CHATBOT_RESPONSE ||
+          "⚠️ El asistente no devolvió una respuesta clara."
+      } else if (typeof responseData === 'string') {
         botResponse = responseData
-      }
-      // Si no es ni objeto ni string, convertimos a string
-      else {
-        botResponse = JSON.stringify(responseData, null, 2)
+      } else {
+        botResponse = '⚠️ Formato de respuesta no reconocido:\n' + JSON.stringify(responseData, null, 2)
       }
 
       const botMessage: Message = {
@@ -131,9 +124,9 @@ export default function ChatBot() {
       }
       setMessages(prev => [...prev, botMessage])
     } catch (error) {
-      console.error('Error in sendMessage:', error)
+      console.error('❌ Error en handleSendMessage:', error)
       const errorMessage: Message = {
-        text: `Error al procesar el mensaje: ${error instanceof Error ? error.message : 'Error desconocido'}`,
+        text: `❌ Error al procesar el mensaje: ${error instanceof Error ? error.message : 'Error desconocido'}`,
         isUser: false,
         timestamp: new Date()
       }
@@ -151,7 +144,6 @@ export default function ChatBot() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Messages Container */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
         {messages.map((message, index) => (
           <div
@@ -186,7 +178,6 @@ export default function ChatBot() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
       <div className="border-t p-4 bg-white">
         <div className="flex items-center space-x-2">
           <label className="cursor-pointer">
