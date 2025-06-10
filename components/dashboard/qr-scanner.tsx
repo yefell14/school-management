@@ -24,6 +24,11 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
   const { user } = useAuth();
   const lastScannedRef = useRef<string>('');
 
+  // Función para formatear la hora en formato HH:mm:ss
+  const formatTime = (date: Date): string => {
+    return date.toTimeString().split(' ')[0];
+  };
+
   useEffect(() => {
     return () => {
       if (qrCodeRef.current) {
@@ -159,12 +164,14 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
         throw checkError;
       }
 
+      const currentTime = formatTime(new Date());
+
       if (asistenciaExistente) {
         // Actualizar la hora de salida
         const { error: updateError } = await supabase
           .from("asistencias_general")
           .update({
-            hora_salida: new Date().toLocaleTimeString(),
+            hora_salida: currentTime,
           })
           .eq("id", asistenciaExistente.id);
 
@@ -185,7 +192,7 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
             rol: usuario.rol,
             fecha: fechaHoy,
             estado: "presente",
-            hora_entrada: new Date().toLocaleTimeString(),
+            hora_entrada: currentTime,
             registrado_por: user?.id
           });
 
