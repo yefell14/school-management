@@ -151,6 +151,11 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
 
       console.log('Usuario encontrado:', usuario); // Debug
 
+      // Verificar si el rol del usuario está permitido para asistencia
+      if (usuario.rol !== 'alumno' && usuario.rol !== 'profesor') {
+        throw new Error(`El rol ${usuario.rol} no está permitido para registrar asistencia`);
+      }
+
       // Verificar si ya existe una asistencia para hoy
       const fechaHoy = new Date().toISOString().split("T")[0];
       const { data: asistenciaExistente, error: checkError } = await supabase
