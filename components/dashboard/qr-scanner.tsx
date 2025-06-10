@@ -22,6 +22,7 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
   const qrCodeRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
+  const lastScannedRef = useRef<string>('');
 
   useEffect(() => {
     return () => {
@@ -50,6 +51,7 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
 
       setCameraError(null);
       setIsProcessing(false);
+      lastScannedRef.current = '';
 
       // Solicitar permisos de cámara primero
       await requestCameraPermission();
@@ -69,8 +71,15 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
             fps: 10,
             qrbox: { width: 250, height: 250 },
             aspectRatio: 1.0,
+            disableFlip: false
           },
           async (decodedText) => {
+            // Evitar procesar el mismo QR múltiples veces
+            if (decodedText === lastScannedRef.current) {
+              return;
+            }
+            lastScannedRef.current = decodedText;
+
             // Detener el escaneo mientras procesamos
             if (qrCodeRef.current) {
               await qrCodeRef.current.stop();
@@ -83,7 +92,9 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
           },
           (errorMessage) => {
             // Ignorar errores de escaneo menores
-            console.log('Error de escaneo:', errorMessage);
+            if (!errorMessage.includes("No barcode or QR code detected")) {
+              console.log('Error de escaneo:', errorMessage);
+            }
           }
         );
 
@@ -120,13 +131,13 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
         throw new Error("Tipo de QR no válido");
       }
 
-      console.log('Buscando usuario:', id); // Debug
+      console.log('Buscando usuario:', decodedText); // Debug
 
-      // Verificar que el usuario existe
+      // Verificar que el usuario existe usando el ID completo
       const { data: usuario, error: userError } = await supabase
         .from("usuarios")
         .select("*")
-        .eq("id", id)
+        .eq("id", decodedText.replace("usuario-", ""))
         .single();
       
       if (userError || !usuario) {
@@ -213,6 +224,7 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
         await qrCodeRef.current.stop();
         setIsScanning(false);
         setIsProcessing(false);
+        lastScannedRef.current = '';
       } catch (error) {
         console.error('Error al detener el escáner:', error);
       }
