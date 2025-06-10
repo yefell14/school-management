@@ -18,6 +18,7 @@ interface QrScannerProps {
 export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const qrCodeRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
@@ -48,6 +49,7 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
       if (!containerRef.current) return;
 
       setCameraError(null);
+      setIsProcessing(false);
 
       // Solicitar permisos de cámara primero
       await requestCameraPermission();
@@ -66,9 +68,18 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
           {
             fps: 10,
             qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
           },
-          (decodedText) => {
-            handleQrCodeSuccess(decodedText);
+          async (decodedText) => {
+            // Detener el escaneo mientras procesamos
+            if (qrCodeRef.current) {
+              await qrCodeRef.current.stop();
+            }
+            await handleQrCodeSuccess(decodedText);
+            // Reiniciar el escaneo después de procesar
+            if (isScanning) {
+              startScanner();
+            }
           },
           (errorMessage) => {
             // Ignorar errores de escaneo menores
@@ -92,7 +103,12 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
   };
 
   const handleQrCodeSuccess = async (decodedText: string) => {
+    if (isProcessing) return; // Evitar procesamiento múltiple
+    setIsProcessing(true);
+
     try {
+      console.log('QR detectado:', decodedText); // Debug
+
       // Verificar formato del QR (usuario-id)
       const [tipo, id] = decodedText.split("-");
       
@@ -104,6 +120,8 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
         throw new Error("Tipo de QR no válido");
       }
 
+      console.log('Buscando usuario:', id); // Debug
+
       // Verificar que el usuario existe
       const { data: usuario, error: userError } = await supabase
         .from("usuarios")
@@ -114,6 +132,8 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
       if (userError || !usuario) {
         throw new Error("Usuario no encontrado");
       }
+
+      console.log('Usuario encontrado:', usuario); // Debug
 
       // Verificar si ya existe una asistencia para hoy
       const fechaHoy = new Date().toISOString().split("T")[0];
@@ -172,11 +192,6 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
         onScanSuccess(decodedText);
       }
 
-      // Detener el escáner después de un escaneo exitoso
-      if (qrCodeRef.current) {
-        await qrCodeRef.current.stop();
-        setIsScanning(false);
-      }
     } catch (error: any) {
       console.error('Error al procesar el código QR:', error);
       if (onScanError) {
@@ -187,6 +202,8 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
         description: error.message || "Error al procesar el código QR",
         variant: "destructive",
       });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -195,6 +212,7 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
       try {
         await qrCodeRef.current.stop();
         setIsScanning(false);
+        setIsProcessing(false);
       } catch (error) {
         console.error('Error al detener el escáner:', error);
       }
@@ -222,12 +240,12 @@ export function QrScanner({ onScanSuccess, onScanError }: QrScannerProps) {
           )}
           <div className="flex justify-center gap-4">
             {!isScanning ? (
-              <Button onClick={startScanner} className="gap-2">
+              <Button onClick={startScanner} className="gap-2" disabled={isProcessing}>
                 <Camera className="h-4 w-4" />
-                Iniciar Escáner
+                {isProcessing ? "Procesando..." : "Iniciar Escáner"}
               </Button>
             ) : (
-              <Button variant="destructive" onClick={stopScanner} className="gap-2">
+              <Button variant="destructive" onClick={stopScanner} className="gap-2" disabled={isProcessing}>
                 <CameraOff className="h-4 w-4" />
                 Detener Escáner
               </Button>
